@@ -956,7 +956,7 @@ bool Utils::addIntArray(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson
 		return false;
 }
 
-bool Utils::parseFromJsonToAccuntConfiguration(const std::string& json, AccountConfiguration& configuration, std::string login)
+bool Utils::parseFromJsonToAccuntConfiguration(const std::string& json, AccountConfiguration& configuration, std::string& login)
 {
 	using namespace rapidjson;
 	Document doc;
@@ -968,7 +968,7 @@ bool Utils::parseFromJsonToAccuntConfiguration(const std::string& json, AccountC
 
 	if (doc.HasMember("login") && doc["login"].IsString())
 	{
-		login = doc["Group"].GetString();
+		login = doc["login"].GetString();
 	}
 	else
 	{

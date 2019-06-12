@@ -3,18 +3,18 @@
 #include <chrono>
 #include <thread>
 
-DirectConn::DirectConn()
+MT4Conn::MT4Conn()
 {
 	watchConntoMT4();
 
 }
 
 
-DirectConn::~DirectConn()
+MT4Conn::~MT4Conn()
 {
 }
 
-bool DirectConn::mt4Init()
+bool MT4Conn::mt4Init()
 {
 	std::string path = Utils::getInstance().getProjectPath();
 	path += Config::getInstance().getMT4ConnConf().find("lib")->second;
@@ -29,7 +29,8 @@ bool DirectConn::mt4Init()
 		SPDLOG(error, "mt4 lib init winsock lib failed.");
 		return false;
 	}
-	if (NULL == (m_managerInter = m_factoryInter.Create(ManAPIVersion)))
+	if (NULL == (m_directInter = m_factoryInter.Create(ManAPIVersion)) ||
+		NULL == (m_pumpInter = m_factoryInter.Create(ManAPIVersion)))
 	{
 		SPDLOG(error, "mt4 factory create mananger interface failed.");
 		return false;
@@ -37,16 +38,14 @@ bool DirectConn::mt4Init()
 	return true;
 }
 
-bool DirectConn::mt4Login(const int login, const char* passwd)
+bool MT4Conn::mt4Login(const int login, const char* passwd, CManagerInterface* manager)
 {
-	if (!mt4Init())
-		return false;
-	if (RET_OK != mt4Conn(Config::getInstance().getMT4ConnConf().find(std::move("host"))->second.c_str()))
+	if (RET_OK != mt4Conn(Config::getInstance().getMT4ConnConf().find(std::move("host"))->second.c_str(), manager))
 		return false;
 	int cnt = 0;
 	while (cnt < 3)
 	{
-		if (RET_OK != m_managerInter->Login(login, passwd))
+		if (RET_OK != manager->Login(login, passwd))
 		{
 			SPDLOG(error, "mt4 server login failed.---{}", cnt+1);
 			cnt++;
@@ -63,22 +62,16 @@ bool DirectConn::mt4Login(const int login, const char* passwd)
 		SPDLOG(error, "3 times of login to mt4 server failed.");
 		return false;
 	}
-
-	//if (RET_OK != m_managerInter->PumpingSwitchEx(NotifyCallBack, 0, this))
-	//{
-	//	SPDLOG(error, "pumpswitch failed.")
-	//	return false;
-	//}
 		
 	return true;
 }
 
-int DirectConn::mt4Conn(const char* host)
+int MT4Conn::mt4Conn(const char* host, CManagerInterface* manager)
 {
 	int cnt = 0;
 	while (cnt < 3)
 	{
-		if (m_managerInter->Connect(host) != RET_OK)
+		if (manager->Connect(host) != RET_OK)
 		{
 			SPDLOG(error, "try to connect to mt4 server failed---{}", cnt + 1);
 			cnt++;
@@ -98,10 +91,59 @@ int DirectConn::mt4Conn(const char* host)
 	return RET_OK;
 }
 
-bool DirectConn::mt4IsConnected()
+void MT4Conn::onPumpingFunc(int code, int type, void *data, void *param)
+{
+	switch (code)
+	{
+	case PUMP_START_PUMPING:
+		Logger::getInstance()->info("PUMP_START_PUMPING...");
+		break;
+	case PUMP_STOP_PUMPING:
+		Logger::getInstance()->info("PUMP_STOP_PUMPING...");
+		break;
+	case PUMP_UPDATE_BIDASK:
+		break;
+	case PUMP_UPDATE_SYMBOLS:
+		break;
+	case PUMP_UPDATE_GROUPS:
+		break;
+	case PUMP_UPDATE_USERS:
+		break;
+	case PUMP_UPDATE_ONLINE:
+		break;
+	case PUMP_UPDATE_TRADES:
+		break;
+	case PUMP_UPDATE_ACTIVATION:
+		break;
+	case PUMP_UPDATE_MARGINCALL:
+		break;
+	case PUMP_UPDATE_REQUESTS:
+		break;
+	case PUMP_UPDATE_PLUGINS:
+		break;
+	case PUMP_UPDATE_NEWS:
+		break;
+	case PUMP_UPDATE_MAIL:
+		break;
+	default: break;
+	}
+}
+
+bool MT4Conn::switchToPumpMode(CManagerInterface* managerInter)
+{
+	if (RET_OK != managerInter->PumpingSwitchEx(&MT4Conn::onPumpingFunc, 0, nullptr))
+	{
+		SPDLOG(error, "pumpswitch failed.");
+		return false;
+	}
+	Logger::getInstance()->info("pumpswitch success.");
+	return true;
+}
+
+bool MT4Conn::mt4DirtIsConnected()
 {
 	try {
-		if (m_managerInter->IsConnected() != 0)
+		if (m_directInter->Ping() == RET_OK)
 			return true;
 		else
 			return false;
@@ -113,22 +155,58 @@ bool DirectConn::mt4IsConnected()
 	return true;
 }
 
-bool DirectConn::createConnToMT4()
+bool MT4Conn::createDirectConnToMT4(CManagerInterface* manager)
 {
-	if (mt4Login(std::stod(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second), 
-		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str()))
+	if (mt4Login(std::stod(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
+		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), m_directInter))
+		return true;
+	else
+		return false;
+}
+bool MT4Conn::createPumpConnToMT4(CManagerInterface* manager)
+{
+	if (m_pumpInter->IsConnected())
+	{
+		m_pumpInter->Disconnect();
+	}
+	m_pumpInter->Release();
+	m_pumpInter = nullptr;
+	if (nullptr == (m_pumpInter = m_factoryInter.Create(ManAPIVersion)))
+		return false;
+
+
+	if (mt4Login(std::stod(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
+		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), m_pumpInter) &&
+		switchToPumpMode(m_pumpInter))
 		return true;
 	else
 		return false;
 }
 
-bool DirectConn::heartBeat()
+bool MT4Conn::createConnToMT4()
 {
-	return m_managerInter->Ping();
-	return true;
+	if (!mt4Init())
+		return false;
+	if (mt4Login(std::stod(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
+		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), m_directInter) &&
+		mt4Login(std::stod(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
+			Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), m_pumpInter) &&
+		switchToPumpMode(m_pumpInter))
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
 }
 
-void DirectConn::watchConntoMT4()
+bool MT4Conn::heartBeat()
+{
+	return m_directInter->Ping();
+}
+
+void MT4Conn::watchConntoMT4()
 {
 	std::thread t([&]()
 	{
@@ -136,28 +214,28 @@ void DirectConn::watchConntoMT4()
 		{
 			std::this_thread::sleep_for(std::chrono::seconds(1));
 
-			if (!mt4IsConnected())
+			if (!mt4DirtIsConnected())
 			{
 				Logger::getInstance()->warn("disconnected to mt4. will try to connect to mt4.");
-				if (createConnToMT4())
-				{
-					Logger::getInstance()->info("connect to mt4 success.");
-				}
-				else
+				if (!createConnToMT4())
 				{
 					Logger::getInstance()->info("connect to mt4 failed.");
 				}
 			}
-			else
-			{ 
-				heartBeat();
+
+			if (!m_pumpInter->IsConnected())
+			{
+				if (!createPumpConnToMT4(m_pumpInter))
+				{
+					Logger::getInstance()->info("connect to mt4 failed.");
+				}
 			}
 		}
 	});
 	t.detach();
 }
 
-ConGroup DirectConn::getGroupCfg(const std::string& group)
+ConGroup MT4Conn::getGroupCfg(const std::string& group)
 {
 	int total = 0;
 	ConGroup* cfgGroup = nullptr;
@@ -166,9 +244,9 @@ ConGroup DirectConn::getGroupCfg(const std::string& group)
 	int tryTimes = 0;
 	do
 	{
-		if (mt4IsConnected())
+		if (mt4DirtIsConnected())
 		{
-			cfgGroup = m_managerInter->CfgRequestGroup(&total);
+			cfgGroup = m_directInter->CfgRequestGroup(&total);
 			if (total)
 			{
 				for (int i = 0; i < total; i++)
@@ -188,11 +266,11 @@ ConGroup DirectConn::getGroupCfg(const std::string& group)
 		}
 	} while (0);
 
-	m_managerInter->MemFree(cfgGroup);
+	m_directInter->MemFree(cfgGroup);
 	return ret;
 }
 
-bool DirectConn::getGroupNames(std::vector<std::string>& groups)
+bool MT4Conn::getGroupNames(std::vector<std::string>& groups)
 {
 	int total = 0;
 	ConGroup* cfgGroup = nullptr;
@@ -200,9 +278,9 @@ bool DirectConn::getGroupNames(std::vector<std::string>& groups)
 	int tryTimes = 0;
 	do
 	{
-		if (mt4IsConnected())
+		if (mt4DirtIsConnected())
 		{
-			cfgGroup = m_managerInter->CfgRequestGroup(&total);
+			cfgGroup = m_directInter->CfgRequestGroup(&total);
 			if (total)
 			{
 				for (int i = 0; i < total; i++)
@@ -221,19 +299,19 @@ bool DirectConn::getGroupNames(std::vector<std::string>& groups)
 		}
 	} while (0);
 
-	m_managerInter->MemFree(cfgGroup);
+	m_directInter->MemFree(cfgGroup);
 	return true;
 }
 
-int DirectConn::getSecuritiesNames(ConSymbolGroup securities[])
+int MT4Conn::getSecuritiesNames(ConSymbolGroup securities[])
 {
 	int res = 0;
 	int tryTimes = 0;
 	do
 	{
-		if (mt4IsConnected())
+		if (mt4DirtIsConnected())
 		{
-			res = m_managerInter->CfgRequestSymbolGroup(securities);
+			res = m_directInter->CfgRequestSymbolGroup(securities);
 		}
 		else
 		{
@@ -249,7 +327,7 @@ int DirectConn::getSecuritiesNames(ConSymbolGroup securities[])
 }
 
 
-bool DirectConn::updateGroupSec(const std::string& group,const std::map<int, ConGroupSec>& cfgGroupSec, std::set<int> index)
+bool MT4Conn::updateGroupSec(const std::string& group,const std::map<int, ConGroupSec>& cfgGroupSec, std::set<int> index)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	int size = sizeof(cfgGroup.secgroups) / sizeof(ConGroupSec);
@@ -272,17 +350,17 @@ bool DirectConn::updateGroupSec(const std::string& group,const std::map<int, Con
 	}	
 
 	int res = 0;
-	if (RET_OK != (res = m_managerInter->CfgUpdateGroup(&cfgGroup)))
+	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
 		Logger::getInstance()->error("update group securities failed.{}, group:{},index:{}",
-			m_managerInter->ErrorDescription(res), group, tmpIndex);
+			m_directInter->ErrorDescription(res), group, tmpIndex);
 		return false;
 	}
 	return true;
 }
 
 
-bool DirectConn::updateGroupSymbol(const std::string& group, const std::map<std::string, ConGroupMargin>& cfgGroupMargin)
+bool MT4Conn::updateGroupSymbol(const std::string& group, const std::map<std::string, ConGroupMargin>& cfgGroupMargin)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	int oldSize = cfgGroup.secmargins_total;
@@ -311,16 +389,16 @@ bool DirectConn::updateGroupSymbol(const std::string& group, const std::map<std:
 	}
 
 	int res = 0;
-	if (RET_OK != (res = m_managerInter->CfgUpdateGroup(&cfgGroup)))
+	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group margins failed.{}", m_managerInter->ErrorDescription(res));
+		Logger::getInstance()->error("update group margins failed.{}", m_directInter->ErrorDescription(res));
 		return false;
 	}
 	return true;
 }
 
 
-GroupCommon DirectConn::getGroupCommon(const std::string& group)
+GroupCommon MT4Conn::getGroupCommon(const std::string& group)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	GroupCommon common;
@@ -337,7 +415,7 @@ GroupCommon DirectConn::getGroupCommon(const std::string& group)
 	return common;
 }
 
-bool DirectConn::updateGroupCommon(const std::string& group, const GroupCommon& common)
+bool MT4Conn::updateGroupCommon(const std::string& group, const GroupCommon& common)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	if (group.compare(cfgGroup.group) == 0)
@@ -359,15 +437,15 @@ bool DirectConn::updateGroupCommon(const std::string& group, const GroupCommon& 
 	
 
 	int res = 0;
-	if (RET_OK != (res = m_managerInter->CfgUpdateGroup(&cfgGroup)))
+	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group common failed.{}", m_managerInter->ErrorDescription(res));
+		Logger::getInstance()->error("update group common failed.{}", m_directInter->ErrorDescription(res));
 		return false;
 	}
 	return true;
 }
 
-GroupMargin DirectConn::getGroupMargin(const std::string& group)
+GroupMargin MT4Conn::getGroupMargin(const std::string& group)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	GroupMargin margin;
@@ -382,7 +460,7 @@ GroupMargin DirectConn::getGroupMargin(const std::string& group)
 	return margin;
 }
 
-bool DirectConn::updateGroupMargin(const std::string group, const GroupMargin& margin)
+bool MT4Conn::updateGroupMargin(const std::string group, const GroupMargin& margin)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	if (group.compare(cfgGroup.group) == 0)
@@ -402,15 +480,15 @@ bool DirectConn::updateGroupMargin(const std::string group, const GroupMargin& m
 
 
 	int res = 0;
-	if (RET_OK != (res = m_managerInter->CfgUpdateGroup(&cfgGroup)))
+	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group margin failed.{}", m_managerInter->ErrorDescription(res));
+		Logger::getInstance()->error("update group margin failed.{}", m_directInter->ErrorDescription(res));
 		return false;
 	}
 	return true;
 }
 
-GroupArchive DirectConn::getGroupArchive(const std::string& group)
+GroupArchive MT4Conn::getGroupArchive(const std::string& group)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	GroupArchive archive;
@@ -420,7 +498,7 @@ GroupArchive DirectConn::getGroupArchive(const std::string& group)
 
 	return archive;
 }
-bool DirectConn::updateGroupArchive(const std::string group, const GroupArchive& archive)
+bool MT4Conn::updateGroupArchive(const std::string group, const GroupArchive& archive)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	if (group.compare(cfgGroup.group) == 0)
@@ -436,14 +514,14 @@ bool DirectConn::updateGroupArchive(const std::string group, const GroupArchive&
 
 
 	int res = 0;
-	if (RET_OK != (res = m_managerInter->CfgUpdateGroup(&cfgGroup)))
+	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group margin failed.{}", m_managerInter->ErrorDescription(res));
+		Logger::getInstance()->error("update group margin failed.{}", m_directInter->ErrorDescription(res));
 		return false;
 	}
 }
 
-GroupReport DirectConn::getGroupReport(const std::string& group)
+GroupReport MT4Conn::getGroupReport(const std::string& group)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	GroupReport report;
@@ -459,7 +537,7 @@ GroupReport DirectConn::getGroupReport(const std::string& group)
 	return report;
 }
 
-bool DirectConn::upateGroupReport(const std::string group, const GroupReport& report)
+bool MT4Conn::upateGroupReport(const std::string group, const GroupReport& report)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	if (group.compare(cfgGroup.group) == 0)
@@ -480,14 +558,14 @@ bool DirectConn::upateGroupReport(const std::string group, const GroupReport& re
 
 
 	int res = 0;
-	if (RET_OK != (res = m_managerInter->CfgUpdateGroup(&cfgGroup)))
+	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group margin failed.{}", m_managerInter->ErrorDescription(res));
+		Logger::getInstance()->error("update group margin failed.{}", m_directInter->ErrorDescription(res));
 		return false;
 	}
 }
 
-GroupPermission DirectConn::getGroupPermission(const std::string& group)
+GroupPermission MT4Conn::getGroupPermission(const std::string& group)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	GroupPermission permission;
@@ -509,7 +587,7 @@ GroupPermission DirectConn::getGroupPermission(const std::string& group)
 	return permission;
 }
 
-bool DirectConn::updateGroupPerssion(const std::string group, const GroupPermission& permission)
+bool MT4Conn::updateGroupPerssion(const std::string group, const GroupPermission& permission)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	if (group.compare(cfgGroup.group) == 0)
@@ -536,30 +614,40 @@ bool DirectConn::updateGroupPerssion(const std::string group, const GroupPermiss
 
 
 	int res = 0;
-	if (RET_OK != (res = m_managerInter->CfgUpdateGroup(&cfgGroup)))
+	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group margin failed.{}", m_managerInter->ErrorDescription(res));
+		Logger::getInstance()->error("update group margin failed.{}", m_directInter->ErrorDescription(res));
 		return false;
 	}
 }
 
-bool DirectConn::updateAccounts(const std::string login, const AccountConfiguration& configuration)
+bool MT4Conn::updateAccounts(const std::string login, const AccountConfiguration& configuration)
 {
+	if (login.empty())
+		return false;
 	int _login = std::stoi(login);
-	int total = 0;
 	bool res = true;
-	UserRecord* ur = m_managerInter->UserRecordsRequest(&_login, &total);
-	if (total == 1)
+	UserRecord ur = {0};
+	int ret = m_pumpInter->UserRecordGet(_login, &ur);
+	if (ret == RET_OK)
 	{
-		strncpy(ur->password, configuration.password.c_str(), configuration.password.length()+1);
-		ur->enable_change_password = configuration.enable_change_password;
-		if (RET_OK != m_managerInter->UserRecordUpdate(ur))
+		strncpy(ur.password, configuration.password.c_str(), configuration.password.length()+1);
+		ur.enable_change_password = configuration.enable_change_password;
+		if (RET_OK != (ret = m_directInter->UserRecordUpdate(&ur)))
+		{
+			Logger::getInstance()->info("error :{}", m_directInter->ErrorDescription(ret));
 			res = false;
+		}
+		if (RET_OK != (ret = m_directInter->UserPasswordSet(_login, configuration.password.c_str(), 0, 0)))
+		{
+			Logger::getInstance()->info("error :{}", m_directInter->ErrorDescription(ret));
+			res = false;
+		}
 	}
 	else
 	{
+		Logger::getInstance()->info("error :{}", m_pumpInter->ErrorDescription(ret));
 		res = false;
 	}
-	m_managerInter->MemFree(ur);
 	return res;
 }

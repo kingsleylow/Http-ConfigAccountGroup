@@ -21,7 +21,7 @@ public:
 	int  stopServer();
 	int  startServer();
 
-	void setMT4Conn(DirectConn conn);
+	void setMT4Conn(MT4Conn conn);
 
 private:
 	static void cbFunc(struct evhttp_request *, void *args);
@@ -64,5 +64,5 @@ private:
 	struct evhttp* m_http;
 	std::map<evhttp_cmd_type, std::string> m_httpMethod;
 	std::map<std::string, URI> m_uri;
-	DirectConn m_mt4Conn;
+	MT4Conn m_mt4Conn;
 };

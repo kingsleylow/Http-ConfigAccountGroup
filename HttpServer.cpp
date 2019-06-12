@@ -55,7 +55,7 @@ HttpServer::~HttpServer()
 
 }
 
-void HttpServer::setMT4Conn(DirectConn conn)
+void HttpServer::setMT4Conn(MT4Conn conn)
 {
 	m_mt4Conn = conn;
 }

@@ -8,7 +8,7 @@
 int main()
 {
 	Config::getInstance().readConf("config/app.conf");
-	DirectConn mt4Conn;
+	MT4Conn mt4Conn;
 	if (!mt4Conn.createConnToMT4())
 	{
 		Logger::getInstance()->error("connect to mt4 failed.");
