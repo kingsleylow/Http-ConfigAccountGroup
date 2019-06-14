@@ -10,6 +10,8 @@
 
 HttpServer::HttpServer()
 {
+	m_mt4Conn = nullptr;
+
 	m_httpMethod = { { EVHTTP_REQ_GET, "GET" },
 	{ EVHTTP_REQ_POST , "POST" },
 	{ EVHTTP_REQ_PUT , "PUT" },
@@ -55,7 +57,7 @@ HttpServer::~HttpServer()
 
 }
 
-void HttpServer::setMT4Conn(MT4Conn conn)
+void HttpServer::setMT4Conn(MT4Conn* conn)
 {
 	m_mt4Conn = conn;
 }
@@ -118,14 +120,15 @@ void HttpServer::cbFunc(struct evhttp_request *req, void *args)
 
 
 	int res = 0;
-	std::string response;
+	std::string des;
+	std::string response = "";
 	if (pSelf->parseReq(req, method, uri, uriArgs, body))
 	{
-		res = pSelf->handleReq(method, uri, uriArgs, body, response);
+		res = pSelf->handleReq(method, uri, uriArgs, body, des, response);
 	}
 	else
 	{
-		response = R"({"message":"http service parse failed"})";
+		des = R"("http service parse failed")";
 	}
 
 	rapidjson::StringBuffer sb;
@@ -135,8 +138,20 @@ void HttpServer::cbFunc(struct evhttp_request *req, void *args)
 	w.Key("code");
 	w.Int(res);
 
-	w.Key("message");
-	w.String(response.c_str());
+	w.Key("description");
+	w.String(des.c_str());
+
+	w.Key("response");
+	if (response.empty())
+	{
+		w.StartObject();
+		w.EndObject();
+	}
+	else
+	{
+		w.RawValue(response.c_str(), response.length(), rapidjson::Type::kObjectType);
+	}
+	
 
 	w.EndObject();
 
@@ -293,7 +308,7 @@ bool HttpServer::parseReq(struct evhttp_request* req, evhttp_cmd_type& method, s
 	return bRes;
 }
 
-int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri, const std::map<std::string, std::string>& uriArgs, const std::string& body, std::string& response)
+int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri, const std::map<std::string, std::string>& uriArgs, const std::string& body,std::string& des, std::string& response)
 {
 	int res = OK;
 	if (method == EVHTTP_REQ_POST)
@@ -301,31 +316,31 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 		switch (m_uri[uri])
 		{
 		case COMMON:
-			res = setGroupCommon(body, response);
+			res = setGroupCommon(body, des, response);
 			break;
 		case PERMISSIONS:
-			res = setGroupPermission(body, response);
+			res = setGroupPermission(body, des, response);
 			break;
 		case ARCHIVING:
-			res = setGroupArchive(body, response);
+			res = setGroupArchive(body, des, response);
 			break;
 		case MARGINS:
-			res = setGroupMargins(body, response);
+			res = setGroupMargins(body, des, response);
 			break;
 		case SECURITIES:
-			res = setGroupSecurities(body, response);
+			res = setGroupSecurities(body, des, response);
 			break;
 		case SYMBOLS:
-			res = setGroupSymbols(body, response);
+			res = setGroupSymbols(body, des, response);
 			break;
 		case REPORTS:
-			res = setGroupReport(body, response);
+			res = setGroupReport(body, des, response);
 			break;
 		case ACCOUNT_CONFIGUTATION:
-			res = setAccount(body, response);
+			res = setAccount(body, des, response);
 			break;
 		default:
-			response = "bad url";
+			des = "bad url";
 			res = BAD_URL;
 			break;
 		}
@@ -335,40 +350,40 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 		switch (m_uri[uri])
 		{
 		case COMMON:
-			res = getGroupCommon(uriArgs, response);
+			res = getGroupCommon(uriArgs,des, response);
 			break;
 		case PERMISSIONS:
-			res = getGroupPermission(uriArgs, response);
+			res = getGroupPermission(uriArgs, des, response);
 			break;
 		case ARCHIVING:
-			res = getGroupArchive(uriArgs, response);
+			res = getGroupArchive(uriArgs,des, response);
 			break;
 		case MARGINS:
-			res = getGroupMargins(uriArgs, response);
+			res = getGroupMargins(uriArgs,des, response);
 			break;
 		case SECURITIES:
-			res = getGroupSecurities(uriArgs, response);
+			res = getGroupSecurities(uriArgs,des, response);
 			break;
 		case SYMBOLS:
-			res = getGroupSymbols(uriArgs, response);
+			res = getGroupSymbols(uriArgs, des, response);
 			break;
 		case REPORTS:
-			res = getGroupReport(uriArgs, response);
+			res = getGroupReport(uriArgs,des, response);
 			break;
 		case COMMON_GROUPS:
-			res = getGroupsNames(response);
+			res = getGroupsNames(des, response);
 			break;
 		case COMMON_SECURITIES:
-			res = getSecuritiesNames(response);
+			res = getSecuritiesNames(des, response);
 			break;
 		case SECURITIES_AUTO_GET:  //get
-			res = getAllGroupsSecurities(response);
+			res = getAllGroupsSecurities(des, response);
 			break;
 		case SECURITIES_AUTO_SET:  //set
-			res = setAllGroupsSecurities(response);
+			res = setAllGroupsSecurities(des, response);
 			break;
 		default:
-			response = "bad url";
+			des = "bad url";
 			res = BAD_URL;
 			break;
 		}
@@ -382,7 +397,7 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 	return res;
 }
 
-int HttpServer::setGroupSecurities(const std::string& body, std::string& response)
+int HttpServer::setGroupSecurities(const std::string& body, std::string& des, std::string& response)
 {
 	int res = 0;
 	std::map<int, ConGroupSec> sec;
@@ -390,428 +405,444 @@ int HttpServer::setGroupSecurities(const std::string& body, std::string& respons
 	std::string group;
 	if (Utils::getInstance().parseFromJsonToSec(body, sec, index, group))
 	{
-		if (m_mt4Conn.updateGroupSec(group, sec, index))
+		if (m_mt4Conn->updateGroupSec(group, sec, index))
 		{
 			Logger::getInstance()->info("update group securities success.");
-			response = "update group securities success.";
+			des = "update group securities success.";
 		}
 		else
 		{
-			response = "update group securities failed.";
+			des = "update group securities failed.";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupCommon(const std::string& body, std::string& response)
+int HttpServer::setGroupCommon(const std::string& body,std::string& des, std::string& response)
 {
 	int res = 0;
-	GroupCommon groupCommon = { 0 };
+	GroupCommon groupCommon;
 	std::string group;
 	if (Utils::getInstance().parseFromJsonToCommon(body, groupCommon, group))
 	{
-		if (m_mt4Conn.updateGroupCommon(group, groupCommon))
+		if (m_mt4Conn->updateGroupCommon(group, groupCommon))
 		{
 			Logger::getInstance()->info("update group common success.");
-			response = "update group common success.";
+			des = "update group common success.";
 		}
 		else
 		{
-			response = "update group common failed.";
+			des = "update group common failed.";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupSymbols(const std::string& body, std::string& response)
+int HttpServer::setGroupSymbols(const std::string& body, std::string& des, std::string& response)
 {
 	int res = 0;
 	std::map<std::string, ConGroupMargin> margins;
 	std::string group;
 	if (Utils::getInstance().parseFromJsonToSymbol(body, margins, group))
 	{
-		if (m_mt4Conn.updateGroupSymbol(group, margins))
+		if (m_mt4Conn->updateGroupSymbol(group, margins))
 		{
 			Logger::getInstance()->info("update group securities success.");
-			response = "update group securities success.";
+			des = "update group securities success.";
 		}
 		else
 		{
-			response = "update group securities failed.";
+			des = "update group securities failed.";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::getGroupCommon(const std::map<std::string, std::string>& uriArgs, std::string& response)
+int HttpServer::getGroupCommon(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
 {
 	int res = 0;
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
+		return res;
 	}
 	GroupCommon groupComm;//default constructor
-	groupComm = m_mt4Conn.getGroupCommon(uriArgs.at("Group"));
+	groupComm = m_mt4Conn->getGroupCommon(uriArgs.at("Group"));
+	/*if (groupComm.group.empty())
+	{
+		des = "Group is not existed, pls check.";
+		res = PARAM_INVALID;
+		return res;
+	}*/
 	if (Utils::getInstance().parseFromCommonToJson(uriArgs.at("Group"), groupComm, response))
 	{
 		Logger::getInstance()->info("serialize group common success.");
+		des = "get group common success.";
 	}
 	else
 	{
-		response = "serialize group common failed.";
+		des = "serialize group common failed.";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGroupSecurities(const std::map<std::string, std::string>& uriArgs, std::string& response)
+int HttpServer::getGroupSecurities(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
 {
 	int res = 0;
 	ConGroup conGroup = { 0 };
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 		return res;
 	}
-	conGroup = m_mt4Conn.getGroupCfg(uriArgs.at("Group"));
+	conGroup = m_mt4Conn->getGroupCfg(uriArgs.at("Group"));
 	int size = sizeof(conGroup.secgroups) / sizeof(ConGroupSec);
 	if (Utils::getInstance().parseFromSecToJson(conGroup.group, conGroup.secgroups, size, response))
 	{
 		Logger::getInstance()->info("serialize group securities success.");
+		des = "get group securities success.";
 	}
 	else
 	{
-		response = "serialize group securities failed.";
+		des = "serialize group securities failed.";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGroupSymbols(const std::map<std::string, std::string>& uriArgs, std::string& response)
+int HttpServer::getGroupSymbols(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
 {
 	int res = 0;
 	ConGroup conGroup = { 0 };
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 		return res;
 	}
-	conGroup = m_mt4Conn.getGroupCfg(uriArgs.at("Group"));
+	conGroup = m_mt4Conn->getGroupCfg(uriArgs.at("Group"));
 	int size = conGroup.secmargins_total;
 	if (Utils::getInstance().parseFromSymbolToJson(conGroup.group, conGroup.secmargins, size, response))
 	{
 		Logger::getInstance()->info("serialize group margins success.");
+		des = "get group symbols success.";
 	}
 	else
 	{
-		response = "serialize group margins failed.";
+		des = "serialize group margins failed.";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGroupsNames(std::string& response)
+int HttpServer::getGroupsNames(std::string& des, std::string& response)
 {
 	int res = 0;
 	std::vector<std::string> common_groups;
-	if (m_mt4Conn.getGroupNames(common_groups))
+	if (m_mt4Conn->getGroupNames(common_groups))
 	{
 		if (Utils::getInstance().parseFromCommonGroupsToJson(common_groups, response))
 		{
 			Logger::getInstance()->info("serialize groups success.");;
+			des = "get group names success.";
 		}
 		else
 		{
-			response = "serialize groups failed.";
+			des = "serialize groups failed.";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		response = "get groups failed.";
+		des = "get groups failed.";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getSecuritiesNames(std::string& response)
+int HttpServer::getSecuritiesNames(std::string& des, std::string& response)
 {
 	int res = 0;
 	ConSymbolGroup securities[MAX_SEC_GROUPS] = { 0 };
-	if (0 == m_mt4Conn.getSecuritiesNames(securities))
+	if (0 == m_mt4Conn->getSecuritiesNames(securities))
 	{
 		int size = sizeof(securities) / sizeof(ConSymbolGroup);
 		if (Utils::getInstance().parseFromCommmonSecuritesToJson(securities, size, response))
 		{
-			Logger::getInstance()->info("serialize securities success.");;
+			Logger::getInstance()->info("serialize securities success.");
+			des = "get sucurities name success.";
 		}
 		else
 		{
-			response = "serialize securities failed.";
+			des = "serialize securities failed.";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		response = "get securites failed.";
+		des = "get securites failed.";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGroupMargins(const std::map<std::string, std::string>& uriArgs, std::string& response)
+int HttpServer::getGroupMargins(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
 {
 	int res = 0;
 	GroupMargin margin;
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 		return res;
 	}
-	margin = m_mt4Conn.getGroupMargin(uriArgs.at("Group"));
+	margin = m_mt4Conn->getGroupMargin(uriArgs.at("Group"));
 
 	if (Utils::getInstance().parseFromMarginToJson(uriArgs.at("Group"), margin,  response))
 	{
 		Logger::getInstance()->info("serialize group margins success.");
+		des = "get group margin success.";
 	}
 	else
 	{
-		response = "serialize group margins failed.";
+		des = "serialize group margins failed.";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
 
-int HttpServer::getGroupArchive(const std::map<std::string, std::string>& uriArgs, std::string& response)
+int HttpServer::getGroupArchive(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
 {
 	int res = 0;
 	GroupArchive archive;
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 		return res;
 	}
-	archive = m_mt4Conn.getGroupArchive(uriArgs.at("Group"));
+	archive = m_mt4Conn->getGroupArchive(uriArgs.at("Group"));
 
 	if (Utils::getInstance().parseFromArchiveToJson(uriArgs.at("Group"), archive, response))
 	{
 		Logger::getInstance()->info("serialize group archive success.");
+		des = "get group archive success.";
 	}
 	else
 	{
-		response = "serialize group archive failed.";
+		des = "serialize group archive failed.";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGroupReport(const std::map<std::string, std::string>& uriArgs, std::string& response)
+int HttpServer::getGroupReport(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
 {
 	int res = 0;
 	GroupReport report;
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 		return res;
 	}
-	report = m_mt4Conn.getGroupReport(uriArgs.at("Group"));
+	report = m_mt4Conn->getGroupReport(uriArgs.at("Group"));
 
 	if (Utils::getInstance().parseFromReportToJson(uriArgs.at("Group"), report, response))
 	{
 		Logger::getInstance()->info("serialize group report success.");
+		des = "get group report success.";
 	}
 	else
 	{
-		response = "serialize group report failed.";
+		des = "serialize group report failed.";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGroupPermission(const std::map<std::string, std::string>& uriArgs, std::string& response)
+int HttpServer::getGroupPermission(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
 {
 	int res = 0;
 	GroupPermission permission;
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 		return res;
 	}
-	permission = m_mt4Conn.getGroupPermission(uriArgs.at("Group"));
+	permission = m_mt4Conn->getGroupPermission(uriArgs.at("Group"));
 
 	if (Utils::getInstance().parseFromPermissionToJson(uriArgs.at("Group"), permission, response))
 	{
 		Logger::getInstance()->info("serialize group permission success.");
+		des = "get group permission success.";
 	}
 	else
 	{
-		response = "serialize group permission failed.";
+		des = "serialize group permission failed.";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::setAccount(const std::string& body, std::string& response)
+int HttpServer::setAccount(const std::string& body, std::string& des, std::string& response)
 {
 	int res = 0;
 	AccountConfiguration configuration;
 	std::string login;
 	if (Utils::getInstance().parseFromJsonToAccuntConfiguration(body, configuration, login))
 	{
-		if (m_mt4Conn.updateAccounts(login, configuration))
+		if (m_mt4Conn->updateAccounts(login, configuration))
 		{
 			Logger::getInstance()->info("update account configuration success.");
-			response = "update account configuration success.";
+			des = "update account configuration success.";
 		}
 		else
 		{
-			response = "update account configuration failed.";
+			des = "update account configuration failed.";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupMargins(const std::string& body, std::string& response)
+int HttpServer::setGroupMargins(const std::string& body, std::string& des, std::string& response)
 {
 	int res = 0;
 	GroupMargin margins;
 	std::string group;
 	if (Utils::getInstance().parseFromJsonToMargin(body, margins, group))
 	{
-		if (m_mt4Conn.updateGroupMargin(group, margins))
+		if (m_mt4Conn->updateGroupMargin(group, margins))
 		{
 			Logger::getInstance()->info("update group margin success.");
-			response = "update group margin success.";
+			des = "update group margin success.";
 		}
 		else
 		{
-			response = "update group margin failed.";
+			des = "update group margin failed.";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupArchive(const std::string& body, std::string& response)
+int HttpServer::setGroupArchive(const std::string& body, std::string& des, std::string& response)
 {
 	int res = 0;
 	GroupArchive archive;
 	std::string group;
 	if (Utils::getInstance().parseFromJsonToArchive(body, archive, group))
 	{
-		if (m_mt4Conn.updateGroupArchive(group, archive))
+		if (m_mt4Conn->updateGroupArchive(group, archive))
 		{
 			Logger::getInstance()->info("update group archive success.");
-			response = "update group archive success.";
+			des = "update group archive success.";
 		}
 		else
 		{
-			response = "update group archive failed.";
+			des = "update group archive failed.";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupReport(const std::string& body, std::string& response)
+int HttpServer::setGroupReport(const std::string& body, std::string& des, std::string& response)
 {
 	int res = 0;
 	GroupReport report;
 	std::string group;
 	if (Utils::getInstance().parseFromJsonToReport(body, report, group))
 	{
-		if (m_mt4Conn.upateGroupReport(group, report))
+		if (m_mt4Conn->upateGroupReport(group, report))
 		{
 			Logger::getInstance()->info("update group report success.");
-			response = "update group report success.";
+			des = "update group report success.";
 		}
 		else
 		{
-			response = "update group report failed.";
+			des = "update group report failed.";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupPermission(const std::string& body, std::string& response)
+int HttpServer::setGroupPermission(const std::string& body, std::string& des, std::string& response)
 {
 	int res = 0;
 	GroupPermission permission;
 	std::string group;
 	if (Utils::getInstance().parseFromJsonToPermission(body, permission, group))
 	{
-		if (m_mt4Conn.updateGroupPerssion(group, permission))
+		if (m_mt4Conn->updateGroupPerssion(group, permission))
 		{
 			Logger::getInstance()->info("update group permission success.");
-			response = "update group permission success.";
+			des = "update group permission success.";
 		}
 		else
 		{
-			response = "update group permission failed.";
+			des = "update group permission failed.";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		response = "param invalid.please check and try again.";
+		des = "param invalid.please check and try again.";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::getAllGroupsSecurities(std::string& response)
+int HttpServer::getAllGroupsSecurities(std::string& des, std::string& response)
 {
 	std::map<int, std::string> securitiesMap;
 	ConSymbolGroup securities[MAX_SEC_GROUPS] = { 0 };
-	if (0 == m_mt4Conn.getSecuritiesNames(securities))
+	if (0 == m_mt4Conn->getSecuritiesNames(securities))
 	{
 		int size = sizeof(securities) / sizeof(ConSymbolGroup);
 		for (int i = 0; i < size; i++)
@@ -821,38 +852,38 @@ int HttpServer::getAllGroupsSecurities(std::string& response)
 	}
 	else
 	{
-		response = "operate failed.";
+		des = "operate failed.";
 		return SERVER_ERROR;
 	}
 
 	std::vector<std::string> common_groups;
-	if (m_mt4Conn.getGroupNames(common_groups))
+	if (m_mt4Conn->getGroupNames(common_groups))
 	{
 		for (auto &group : common_groups)
 		{
 			ConGroup conGroup = { 0 };
-			conGroup = m_mt4Conn.getGroupCfg(group);
+			conGroup = m_mt4Conn->getGroupCfg(group);
 			int size = sizeof(conGroup.secgroups) / sizeof(ConGroupSec);
 			for (int i = 0; i < size; i++)
 			{
 				if (!SqliteClient::getInstance().add(i, securitiesMap[i], conGroup))
 				{
-					response = "operate failed.";
+					des = "operate failed.";
 					return SERVER_ERROR;
 				}
 			}
 		}
-		response = "operate success";
+		des = "operate success";
 		return OK;
 	}
 	else
 	{
-		response = "operate failed.";
+		des = "operate failed.";
 		return SERVER_ERROR;
 	}
 }
 
-int HttpServer::setAllGroupsSecurities(std::string& response)
+int HttpServer::setAllGroupsSecurities(std::string& des, std::string& response)
 {
 	//std::unordered_map<std::string, std::vector<std::string>> records;
 	std::vector<std::vector<std::string>> records;
@@ -887,7 +918,7 @@ int HttpServer::setAllGroupsSecurities(std::string& response)
 			std::set<int> sIndex;
 			sIndex.insert(std::stoi(r.at(0)));
 
-			if (m_mt4Conn.updateGroupSec(r.at(2), sec, sIndex))
+			if (m_mt4Conn->updateGroupSec(r.at(2), sec, sIndex))
 			{
 				Logger::getInstance()->info("update group securities success.");
 			}
@@ -896,12 +927,12 @@ int HttpServer::setAllGroupsSecurities(std::string& response)
 				Logger::getInstance()->info("update group securities failed.");
 			}
 		}
-		response = "operate success";
+		des = "operate success";
 		return OK;
 	}
 	else
 	{
-		response = "operate failed.";
+		des = "operate failed.";
 		return SERVER_ERROR;
 	}
 }
@@ -915,7 +946,7 @@ void HttpServer::readdb(ConGroupSec value,int index, std::string group, void* se
 	std::set<int> sIndex;
 	sIndex.insert(index);
 
-	if (pThis->m_mt4Conn.updateGroupSec(group, sec, sIndex))
+	if (pThis->m_mt4Conn->updateGroupSec(group, sec, sIndex))
 	{
 		Logger::getInstance()->info("update group securities success.");
 	}

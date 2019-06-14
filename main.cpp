@@ -33,7 +33,8 @@ int main()
 		Logger::getInstance()->info("http server init success.");
 		std::cout << "http server init success." << std::endl;
 	}
-	http.setMT4Conn(mt4Conn);
+	http.setMT4Conn(&mt4Conn);
+	mt4Conn.watchConntoMT4();
 	std::cout << "running..." << std::endl;
 	http.startServer();
 	return 0;

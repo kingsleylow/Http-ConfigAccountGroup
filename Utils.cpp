@@ -388,7 +388,7 @@ bool Utils::parseFromJsonToCommon(const std::string json, GroupCommon& common, s
 			addDouble(o, "default_deposit", common.default_deposit) &&
 			addString(o, "currency", common.currency) &&
 			addInt(o, "default_leverage", common.default_leverage) &&
-			addDouble(o, "interastrate", common.interestrate))
+			addDouble(o, "interestrate", common.interestrate))
 		{
 
 		}
@@ -922,6 +922,7 @@ bool Utils::addDouble(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::
 	if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsDouble())
 	{
 		value = obj[key.c_str()].GetDouble();
+		return true;
 	}
 	else if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsInt())
 	{

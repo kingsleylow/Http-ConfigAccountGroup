@@ -3,6 +3,7 @@
 #include "Config.h"
 #include "Utils.h"
 #include <set>
+#include <map>
 
 //using URI = enum { COMMON, PERMISSIONS, ARCHIVING, MARGINS, SECURITIES, SYMBOLS, REPORTS };
 using pumpCallBack = void(__stdcall *)(int code, int type, void *data, void *param);
@@ -23,6 +24,8 @@ public:
 	*************************************************/
 
 	bool createConnToMT4();
+
+	void watchConntoMT4();
 
 	ConGroup getGroupCfg(const std::string& group);
 	bool updateGroupSec(const std::string& group, const std::map<int, ConGroupSec>& cfgGroupSec,std::set<int> index);
@@ -50,6 +53,7 @@ public:
 	bool updateAccounts(const std::string login, const AccountConfiguration& configuration);
 
 private:
+	bool storeGroupsInfo();
 	/************************************************
 	** Connection to a trading server
 	** Arguments:
@@ -90,8 +94,6 @@ private:
 	*************************************************/
 	bool mt4Init();
 
-	void watchConntoMT4();
-
 	bool heartBeat();
 	bool mt4DirtIsConnected();
 
@@ -104,5 +106,6 @@ private:
 	CManagerInterface* m_directInter;
 	CManagerInterface* m_pumpInter;
 	CManagerFactory    m_factoryInter;
+	std::map<std::string, ConGroup> m_GroupsInfo;
 };
 

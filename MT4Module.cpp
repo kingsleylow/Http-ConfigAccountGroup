@@ -5,8 +5,6 @@
 
 MT4Conn::MT4Conn()
 {
-	watchConntoMT4();
-
 }
 
 
@@ -93,6 +91,7 @@ int MT4Conn::mt4Conn(const char* host, CManagerInterface* manager)
 
 void MT4Conn::onPumpingFunc(int code, int type, void *data, void *param)
 {
+	MT4Conn* pThis = (MT4Conn*)param;
 	switch (code)
 	{
 	case PUMP_START_PUMPING:
@@ -106,6 +105,7 @@ void MT4Conn::onPumpingFunc(int code, int type, void *data, void *param)
 	case PUMP_UPDATE_SYMBOLS:
 		break;
 	case PUMP_UPDATE_GROUPS:
+		pThis->storeGroupsInfo();
 		break;
 	case PUMP_UPDATE_USERS:
 		break;
@@ -129,9 +129,29 @@ void MT4Conn::onPumpingFunc(int code, int type, void *data, void *param)
 	}
 }
 
+bool MT4Conn::storeGroupsInfo()
+{
+	int total = 0;
+	bool res = true;
+	ConGroup* groupInfo = m_pumpInter->GroupsGet(&total);
+	if (total)
+	{
+		for (int i = 0; i < total; i++)
+		{
+			m_GroupsInfo[groupInfo[i].group] = groupInfo[i];
+		}
+	}
+	else
+	{
+		res = false;
+	}
+	m_pumpInter->MemFree(groupInfo);
+	return res;
+}
+
 bool MT4Conn::switchToPumpMode(CManagerInterface* managerInter)
 {
-	if (RET_OK != managerInter->PumpingSwitchEx(&MT4Conn::onPumpingFunc, 0, nullptr))
+	if (RET_OK != managerInter->PumpingSwitchEx(&MT4Conn::onPumpingFunc, 0, this))
 	{
 		SPDLOG(error, "pumpswitch failed.");
 		return false;
@@ -237,7 +257,9 @@ void MT4Conn::watchConntoMT4()
 
 ConGroup MT4Conn::getGroupCfg(const std::string& group)
 {
-	int total = 0;
+	ConGroup ret = { 0 };
+	ret = m_GroupsInfo[group];
+	/*int total = 0;
 	ConGroup* cfgGroup = nullptr;
 	ConGroup ret = { 0 };
 	
@@ -266,7 +288,7 @@ ConGroup MT4Conn::getGroupCfg(const std::string& group)
 		}
 	} while (0);
 
-	m_directInter->MemFree(cfgGroup);
+	m_directInter->MemFree(cfgGroup);*/
 	return ret;
 }
 
@@ -400,7 +422,8 @@ bool MT4Conn::updateGroupSymbol(const std::string& group, const std::map<std::st
 
 GroupCommon MT4Conn::getGroupCommon(const std::string& group)
 {
-	ConGroup cfgGroup(std::move(getGroupCfg(group)));
+	//ConGroup cfgGroup(std::move(getGroupCfg(group)));
+	ConGroup cfgGroup(m_GroupsInfo[group]);
 	GroupCommon common;
 	common.company = cfgGroup.company;
 	common.currency = cfgGroup.currency;
@@ -602,7 +625,7 @@ bool MT4Conn::updateGroupPerssion(const std::string group, const GroupPermission
 		memcpy(cfgGroup.news_languages, permission.news_language, 8);
 		cfgGroup.news_languages_total = permission.news_language_total;
 		cfgGroup.rights = permission.rights;
-		memcpy(cfgGroup.securities_hash, permission.securities_hash.c_str(), permission.securities_hash.size());
+		//memcpy(cfgGroup.securities_hash, permission.securities_hash.c_str(), permission.securities_hash.size());
 		cfgGroup.timeout = permission.timeout;
 		memcpy(cfgGroup.unused_rights, permission.unused_rights, 2);
 		cfgGroup.use_swap = permission.use_swap;
