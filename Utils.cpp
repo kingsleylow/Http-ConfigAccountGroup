@@ -388,7 +388,7 @@ bool Utils::parseFromJsonToCommon(const std::string json, GroupCommon& common, s
 			addDouble(o, "default_deposit", common.default_deposit) &&
 			addString(o, "currency", common.currency) &&
 			addInt(o, "default_leverage", common.default_leverage) &&
-			addDouble(o, "interastrate", common.interestrate))
+			addDouble(o, "interestrate", common.interestrate))
 		{
 
 		}
@@ -922,6 +922,7 @@ bool Utils::addDouble(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::
 	if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsDouble())
 	{
 		value = obj[key.c_str()].GetDouble();
+		return true;
 	}
 	else if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsInt())
 	{
@@ -956,7 +957,7 @@ bool Utils::addIntArray(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson
 		return false;
 }
 
-bool Utils::parseFromJsonToAccuntConfiguration(const std::string& json, AccountConfiguration& configuration, std::string login)
+bool Utils::parseFromJsonToAccuntConfiguration(const std::string& json, AccountConfiguration& configuration, std::string& login)
 {
 	using namespace rapidjson;
 	Document doc;
@@ -968,7 +969,7 @@ bool Utils::parseFromJsonToAccuntConfiguration(const std::string& json, AccountC
 
 	if (doc.HasMember("login") && doc["login"].IsString())
 	{
-		login = doc["Group"].GetString();
+		login = doc["login"].GetString();
 	}
 	else
 	{

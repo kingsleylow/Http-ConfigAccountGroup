@@ -3,13 +3,15 @@
 #include "Config.h"
 #include "Utils.h"
 #include <set>
+#include <map>
 
 //using URI = enum { COMMON, PERMISSIONS, ARCHIVING, MARGINS, SECURITIES, SYMBOLS, REPORTS };
-class DirectConn
+using pumpCallBack = void(__stdcall *)(int code, int type, void *data, void *param);
+class MT4Conn
 {
 public:
-	DirectConn();
-	~DirectConn();
+	MT4Conn();
+	~MT4Conn();
 
 public:
 	/************************************************
@@ -20,9 +22,10 @@ public:
 	**   false: disconnected.
 	**   true : connected
 	*************************************************/
-	bool mt4IsConnected();
 
 	bool createConnToMT4();
+
+	void watchConntoMT4();
 
 	ConGroup getGroupCfg(const std::string& group);
 	bool updateGroupSec(const std::string& group, const std::map<int, ConGroupSec>& cfgGroupSec,std::set<int> index);
@@ -50,6 +53,7 @@ public:
 	bool updateAccounts(const std::string login, const AccountConfiguration& configuration);
 
 private:
+	bool storeGroupsInfo();
 	/************************************************
 	** Connection to a trading server
 	** Arguments:
@@ -67,7 +71,7 @@ private:
 	**   RET_GENERATE_KEY(10): Key generation is required.
     **   RET_SECURITY_SESSION(11): Connection using extended authentication.
 	*************************************************/
-	int mt4Conn(const char* host);
+	int mt4Conn(const char* host, CManagerInterface* manager);
 
 	/************************************************
     ** Authentication on the trading server using a manager account
@@ -78,7 +82,7 @@ private:
     **   true: success.
 	**   false : failure.
     *************************************************/
-	bool mt4Login(const int login, const char* passwd);
+	bool mt4Login(const int login, const char* passwd, CManagerInterface* manager);
 
 	/************************************************
 	** create interface of manager api
@@ -90,12 +94,18 @@ private:
 	*************************************************/
 	bool mt4Init();
 
-	void watchConntoMT4();
-
 	bool heartBeat();
+	bool mt4DirtIsConnected();
 
+	bool createDirectConnToMT4(CManagerInterface* manager);
+	bool createPumpConnToMT4(CManagerInterface* manager);
+
+	static void __stdcall onPumpingFunc(int code, int type, void *data, void *param);
+	bool switchToPumpMode(CManagerInterface* managerInter);
 private:
-	CManagerInterface* m_managerInter;
+	CManagerInterface* m_directInter;
+	CManagerInterface* m_pumpInter;
 	CManagerFactory    m_factoryInter;
+	std::map<std::string, ConGroup> m_GroupsInfo;
 };
 
