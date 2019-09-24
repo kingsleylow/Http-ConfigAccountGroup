@@ -1198,6 +1198,7 @@ bool Utils::parseFromIPListToJson(const ConAccess ip[], const int size, std::str
 	w.EndArray();
 	w.EndObject();
 
+	json = sb.GetString();
 	return true;
 }
 
