@@ -122,6 +122,17 @@ public:
 
 	bool parseFromJsonToAccuntConfiguration(const std::string& json, AccountConfiguration& configuration, std::string& login);
 
+	bool parseFromDatafeedToJson(const ConFeeder[], const int size, std::string& json);
+	bool parseFromGlobalCommonToJson(const ConCommon&, std::string& json);
+	bool parseFromIPListToJson(const ConAccess[], const int size, std::string& json);
+	bool parseFromSymbolsListToJson(const std::vector<ConSymbol>&, std::string& json);
+	bool parseFromSymbolToJson(const ConSymbol& symbol, std::string& json);
+	bool parseFromJsonToSymbol(const std::string& json, std::string& symbol);
+	bool parseFromDCListToJson(const ConDataServer[], const int size, std::string& json);
+	bool parseFromPluginListToJson(const ConPluginParam[], const int size, std::string& json);
+	bool parseFromPerformanceToJson(const PerformanceInfo[], const int size, std::string& json);
+	bool parseFromJsonToPerformance(const std::string& json, unsigned int &seconds);
+
 private:
 	Utils();
 	~Utils() = default;

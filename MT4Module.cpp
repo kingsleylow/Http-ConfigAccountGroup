@@ -103,6 +103,7 @@ void MT4Conn::onPumpingFunc(int code, int type, void *data, void *param)
 	case PUMP_UPDATE_BIDASK:
 		break;
 	case PUMP_UPDATE_SYMBOLS:
+		pThis->storeSymbolsInfo();
 		break;
 	case PUMP_UPDATE_GROUPS:
 		pThis->storeGroupsInfo();
@@ -147,6 +148,20 @@ bool MT4Conn::storeGroupsInfo()
 	}
 	m_pumpInter->MemFree(groupInfo);
 	return res;
+}
+
+bool MT4Conn::storeSymbolsInfo()
+{
+	int total = 0;
+	ConSymbol* symbols = m_pumpInter->SymbolsGetAll(&total);
+	if (NULL == symbols)
+		return false;
+	for (int i = 0; i < total; i++)
+	{
+		m_SymbolsInfo[symbols[i].symbol] = symbols[i];
+	}
+	m_pumpInter->MemFree(symbols);
+	return true;
 }
 
 bool MT4Conn::switchToPumpMode(CManagerInterface* managerInter)
@@ -673,4 +688,115 @@ bool MT4Conn::updateAccounts(const std::string login, const AccountConfiguration
 		res = false;
 	}
 	return res;
+}
+
+ConFeeder* MT4Conn::getGlobalDatafeed(int& total)
+{
+	ConFeeder* feeder = nullptr;
+	if (mt4DirtIsConnected())
+	{
+		feeder = m_directInter->CfgRequestFeeder(&total);
+	}
+	return feeder;
+}
+
+void MT4Conn::releaseGlobalDatafeed(ConFeeder* feeder)
+{
+	if (mt4DirtIsConnected())
+	{
+		m_directInter->MemFree(feeder);
+	}
+}
+
+ConCommon MT4Conn::getGlobalCommon()
+{
+	ConCommon common = {0};
+	if (mt4DirtIsConnected())
+	{
+		m_directInter->CfgRequestCommon(&common);
+	}
+	return common;
+}
+
+ConAccess* MT4Conn::getGlobalIPList(int& total)
+{
+	ConAccess* ip = nullptr;
+	if (mt4DirtIsConnected())
+	{
+		ip = m_directInter->CfgRequestAccess(&total);
+	}
+	return ip;
+}
+
+bool MT4Conn::getGlobalSymbols(std::vector<ConSymbol>& symbols)
+{
+	if (m_SymbolsInfo.empty())
+		return false;
+	for (auto& s : m_SymbolsInfo)
+	{
+		symbols.push_back(s.second);
+	}	
+	return true;
+}
+
+bool  MT4Conn::getGlobalSymbols(std::string& symbol, ConSymbol& con)
+{
+	if (m_SymbolsInfo.empty() || m_SymbolsInfo.find(symbol) == m_SymbolsInfo.end())
+		return false;
+	else
+	{
+		con = m_SymbolsInfo[symbol];
+		return true;
+	}
+}
+
+ConDataServer* MT4Conn::getGlobalDCList(int& total)
+{
+	ConDataServer* dc = nullptr;
+	if (mt4DirtIsConnected())
+	{
+		dc = m_directInter->CfgRequestDataServer(&total);
+	}
+	return dc;
+}
+void MT4Conn::releaseGlobalDCList(ConDataServer* dc)
+{
+	if (mt4DirtIsConnected())
+	{
+		m_directInter->MemFree(dc);
+	}
+}
+
+ConPluginParam* MT4Conn::getGlobalPluginList(int& total)
+{
+	ConPluginParam* cp = nullptr;
+	if (mt4DirtIsConnected())
+	{
+		cp = m_directInter->CfgRequestPlugin(&total);
+	}
+	return cp;
+}
+void MT4Conn::releaseGlobalPluginList(ConPluginParam* cp)
+{
+	if (mt4DirtIsConnected())
+	{
+		m_directInter->MemFree(cp);
+	}
+}
+
+PerformanceInfo* MT4Conn::getGlobalPerformance(const time_t from, int& total)
+{
+	PerformanceInfo* pi = nullptr;
+	if (mt4DirtIsConnected())
+	{
+		pi = m_directInter->PerformanceRequest(from, &total);
+	}
+	return pi;
+}
+void MT4Conn::releaseGlobalPerformance(PerformanceInfo* pi)
+{
+	if (mt4DirtIsConnected())
+	{
+		m_directInter->MemFree(pi);
+	}
 }

@@ -33,11 +33,21 @@ HttpServer::HttpServer()
 	std::string common_groups = Config::getInstance().getHTTPConf().find("common-account-groups")->second;
 	std::string common_securities = Config::getInstance().getHTTPConf().find("common-symbol-groups")->second;
 	std::string securities_auto = Config::getInstance().getHTTPConf().find("account-group-securities-auto")->second;
+
 	std::string securities_auto_get = securities_auto + "-get";
 	std::string securities_auto_set = securities_auto + "-set";
 
 	std::string accounts = Config::getInstance().getHTTPConf().find("account-configuration")->second;
-	
+
+	std::string global_datafeed = Config::getInstance().getHTTPConf().find("datafeed-configuration")->second;
+	std::string global_common =  Config::getInstance().getHTTPConf().find("common-configuration")->second;
+	std::string global_iplist =  Config::getInstance().getHTTPConf().find("ip-access-configuration")->second;
+	std::string global_symbols_list =  Config::getInstance().getHTTPConf().find("symbols-list")->second;
+	std::string global_symbol_conf = Config::getInstance().getHTTPConf().find("symbol-configuration")->second;
+	std::string global_dc = Config::getInstance().getHTTPConf().find("data-center-configuration")->second;
+	std::string global_plugin =  Config::getInstance().getHTTPConf().find("plugin-configuration")->second;
+	std::string global_performance =  Config::getInstance().getHTTPConf().find("performance-configuration")->second;
+
 	m_uri = { {common, COMMON},
 	{permissions, PERMISSIONS},
 	{archiving, ARCHIVING},
@@ -49,7 +59,15 @@ HttpServer::HttpServer()
 	{common_securities, COMMON_SECURITIES},
 	{securities_auto_get, SECURITIES_AUTO_GET},
 	{securities_auto_set, SECURITIES_AUTO_SET},
-	{accounts, ACCOUNT_CONFIGUTATION} };
+	{accounts, ACCOUNT_CONFIGUTATION},
+	{global_datafeed, GLOBAL_DATAFEED},
+	{global_common, GLOBAL_COMMON},
+	{global_iplist, GLOBAL_IP},
+	{global_symbols_list, GLOBAL_SYMBOLS_LIST},
+	{global_symbol_conf, GLOBAL_SYMBOL},
+	{global_dc, GLOBAL_DC},
+	{global_plugin, GLOBAL_PLUGIN},
+	{global_performance, GLOBAL_PERFORMANCE} };
 }
 
 HttpServer::~HttpServer()
@@ -339,6 +357,12 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 		case ACCOUNT_CONFIGUTATION:
 			res = setAccount(body, des, response);
 			break;
+		case GLOBAL_SYMBOL:
+			res = getGlobalSymbol(body, des, response);
+			break;
+		case GLOBAL_PERFORMANCE:
+			res = getGlobalPerformance(body, des, response);
+			break;
 		default:
 			des = "bad url";
 			res = BAD_URL;
@@ -381,6 +405,24 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 			break;
 		case SECURITIES_AUTO_SET:  //set
 			res = setAllGroupsSecurities(des, response);
+			break;
+		case GLOBAL_DATAFEED:
+			res = getGlobalDatafeed(des, response);
+			break;
+		case GLOBAL_COMMON:
+			res = getGlobalCommon(des, response);
+			break;
+		case GLOBAL_IP:
+			res = getGlobalIPlist(des, response);
+			break;
+		case GLOBAL_SYMBOLS_LIST:
+			res = getGlobalSymbolsList(des, response);
+			break;
+		case GLOBAL_DC:
+			res = getGlobalDC(des, response);
+			break;
+		case GLOBAL_PLUGIN:
+			res = getGlobalPlugin(des, response);
 			break;
 		default:
 			des = "bad url";
@@ -954,4 +996,192 @@ void HttpServer::readdb(ConGroupSec value,int index, std::string group, void* se
 	{
 		Logger::getInstance()->info("update group securities failed.");
 	}
+}
+
+
+int HttpServer::getGlobalDatafeed(std::string& des, std::string& response)
+{
+	int res = 0;
+	int total = 0;
+	ConFeeder* feeder = m_mt4Conn->getGlobalDatafeed(total);
+
+	if (Utils::getInstance().parseFromDatafeedToJson(feeder, total, response))
+	{
+		Logger::getInstance()->info("serialize datafeeder success.");
+		des = "get datafeeder list success.";
+	}
+	else
+	{
+		des = "serialize datafeeder failed.";
+		res = SERVER_ERROR;
+	}
+	m_mt4Conn->releaseGlobalDatafeed(feeder);
+	return res;
+}
+int HttpServer::getGlobalCommon(std::string& des, std::string& response)
+{
+	int res = 0;
+	ConCommon common = m_mt4Conn->getGlobalCommon();
+	if (Utils::getInstance().parseFromGlobalCommonToJson(common, response))
+	{
+		Logger::getInstance()->info("serialize global common success");
+		des = "get global common success.";
+	}
+	else
+	{
+		des = "serialize global common failed.";
+		res = SERVER_ERROR;
+	}
+	return res;
+}
+int HttpServer::getGlobalIPlist(std::string& des, std::string& response)
+{
+	int res = 0;
+	int total = 0;
+	ConAccess* ip = m_mt4Conn->getGlobalIPList(total);
+	if (Utils::getInstance().parseFromIPListToJson(ip, total, response))
+	{
+		Logger::getInstance()->info("serialize global ip-list success.");
+		des = "get access list success.";
+	}
+	else
+	{
+		des = "serialize global ip-list failed.";
+		res = SERVER_ERROR;
+	}
+	return res;
+}
+
+int HttpServer::getGlobalSymbolsList(std::string& des, std::string& response)
+{
+	int res = 0;
+	std::vector<ConSymbol> symbols;
+	if (!m_mt4Conn->getGlobalSymbols(symbols))
+	{
+		Logger::getInstance()->error("mt4 get symbols info failed.");
+		des = "mt4 get symbols info failed";
+		res = SERVER_ERROR;
+		return res;
+	}
+	else
+	{
+		if (Utils::getInstance().parseFromSymbolsListToJson(symbols, response))
+		{
+			Logger::getInstance()->info("serialize symbol list success.");
+			des = "get symbol list succes.";
+		}
+		else
+		{
+			Logger::getInstance()->info("serialize symbol list failed.");
+			des = "derialize symbol list failed.";
+			res = SERVER_ERROR;
+		}
+	}
+	return res;
+}
+int HttpServer::getGlobalSymbol(const std::string& body, std::string& des, std::string& response)
+{
+	int res = 0;
+	std::string symbol;
+	if (!Utils::getInstance().parseFromJsonToSymbol(body, symbol))
+	{
+		des = "invalid param";
+		res = PARAM_INVALID;
+		return res;
+	}
+	ConSymbol con = {};
+	if (m_mt4Conn->getGlobalSymbols(symbol, con) && Utils::getInstance().parseFromSymbolToJson(con, response))
+	{
+		Logger::getInstance()->info("serial symbol conf success.");
+		des = "get symbol conf success.";
+	}
+	else
+	{
+		Logger::getInstance()->error("get symbol conf failed.");
+		des = "get symbol conf failed.";
+		res = SERVER_ERROR;
+	}
+	return res;
+}
+
+int HttpServer::getGlobalDC(std::string& des, std::string& response)
+{
+	int res = 0;
+	int total = 0;
+	ConDataServer* dc = m_mt4Conn->getGlobalDCList(total);
+	if (NULL == dc)
+	{
+		Logger::getInstance()->error("dc list get failed");
+		des = "dc list get failed.";
+		res = SERVER_ERROR;
+	}
+	else
+	{
+		if (Utils::getInstance().parseFromDCListToJson(dc, total, response))
+		{
+			Logger::getInstance()->info("dc list serialize success.");
+			des = "get dc list success.";
+		}
+		else
+		{
+			Logger::getInstance()->error("dc list serialize failed.");
+			des = "dc list derialize failed.";
+			res = SERVER_ERROR;
+		}
+		m_mt4Conn->releaseGlobalDCList(dc);
+	}
+	return res;
+}
+int HttpServer::getGlobalPlugin(std::string& des, std::string& response)
+{
+	int res = 0;
+	int total = 0;
+	ConPluginParam* cp = m_mt4Conn->getGlobalPluginList(total);
+	if (NULL == cp)
+	{
+		Logger::getInstance()->error("cp list get failed.");
+		des = "plugin list get failed.";
+		res = SERVER_ERROR;
+	}
+	else
+	{
+		if (Utils::getInstance().parseFromPluginListToJson(cp, total, response))
+		{
+			Logger::getInstance()->info("cp list serialize success.");
+			des = "get plugin list success.";
+		}
+		else
+		{
+			Logger::getInstance()->error("cp list serialize failed.");
+			des = "plugin list derialize failed.";
+			res = SERVER_ERROR;
+		}
+		m_mt4Conn->releaseGlobalPluginList(cp);
+	}
+	return res;
+}
+int HttpServer::getGlobalPerformance(const std::string& body, std::string& des, std::string& response)
+{
+	int res = 0;
+	unsigned int from = 0;
+	if (!Utils::getInstance().parseFromJsonToPerformance(body, from))
+	{
+		des = "invalid param";
+		res = PARAM_INVALID;
+		return res;
+	}
+	PerformanceInfo* pi = nullptr;
+	int total = 0;
+	if (NULL != (pi = m_mt4Conn->getGlobalPerformance(from, total)) && Utils::getInstance().parseFromPerformanceToJson(pi, total, response))
+	{
+		Logger::getInstance()->info("serial performance conf success.");
+		des = "get performance conf success.";
+	}
+	else
+	{
+		Logger::getInstance()->error("get performance conf failed.");
+		des = "get performance conf failed.";
+		res = SERVER_ERROR;
+	}
+	return res;
 }

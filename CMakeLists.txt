@@ -4,6 +4,8 @@ project(HttpServer)
 
 add_definitions(-std=c++11)
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4003")
+
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/include/libevent)
 include_directories(${CMAKE_SOURCE_DIR}/include/libevent/event2)

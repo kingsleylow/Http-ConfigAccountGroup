@@ -52,8 +52,23 @@ public:
 
 	bool updateAccounts(const std::string login, const AccountConfiguration& configuration);
 
+	ConFeeder* getGlobalDatafeed(int& total);
+	void releaseGlobalDatafeed(ConFeeder* feeder);
+	ConAccess* getGlobalIPList(int& total);
+	bool getGlobalSymbols(std::vector<ConSymbol>& symbols);
+	bool  MT4Conn::getGlobalSymbols(std::string& symbol, ConSymbol& con);
+	ConDataServer* getGlobalDCList(int& total);
+	void releaseGlobalDCList(ConDataServer*);
+	ConPluginParam* getGlobalPluginList(int& total);
+	void releaseGlobalPluginList(ConPluginParam*);
+	PerformanceInfo* getGlobalPerformance(const time_t from, int& total);
+	void releaseGlobalPerformance(PerformanceInfo*);
+
+	ConCommon getGlobalCommon();
+
 private:
 	bool storeGroupsInfo();
+	bool storeSymbolsInfo();
 	/************************************************
 	** Connection to a trading server
 	** Arguments:
@@ -107,5 +122,6 @@ private:
 	CManagerInterface* m_pumpInter;
 	CManagerFactory    m_factoryInter;
 	std::map<std::string, ConGroup> m_GroupsInfo;
+	std::map<std::string, ConSymbol> m_SymbolsInfo;
 };
 

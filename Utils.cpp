@@ -995,3 +995,590 @@ bool Utils::parseFromJsonToAccuntConfiguration(const std::string& json, AccountC
 	}
 	return true;
 }
+
+bool Utils::parseFromDatafeedToJson(const ConFeeder feeder[], const int size, std::string& json)
+{
+	if (nullptr == feeder || 0 == size)
+		return false;
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+	
+	w.StartObject();
+	w.Key("datafeed");
+	w.StartArray();
+	for (int i = 0; i < size; i++)
+	{
+		w.StartObject();
+		w.Key("name");
+		w.String(feeder[i].name);
+		w.Key("file");
+		w.String(feeder[i].file);
+		w.Key("server");
+		w.String(feeder[i].server);
+		w.Key("login");
+		w.String(feeder[i].login);
+		w.Key("pass");
+		w.String(feeder[i].pass);
+		w.Key("keywords");
+		w.String(feeder[i].keywords);
+		w.Key("enable");
+		w.Int(feeder[i].enable);
+		w.Key("mode");
+		w.Int(feeder[i].mode);
+		w.Key("timeout");
+		w.Int(feeder[i].timeout);
+		w.Key("timeout_reconnect");
+		w.Int(feeder[i].timeout_reconnect);
+		w.Key("timeout_sleep");
+		w.Int(feeder[i].timeout_sleep);
+		w.Key("attemps_sleep");
+		w.Int(feeder[i].attemps_sleep);
+		w.Key("news_langid");
+		w.Int(feeder[i].news_langid);
+		w.EndObject();
+	}
+	w.EndArray();
+	w.EndObject();
+
+	json = sb.GetString();
+	return true;
+}
+
+bool Utils::parseFromGlobalCommonToJson(const ConCommon& common, std::string& json)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+
+	w.StartObject();
+	w.Key("owner");
+	w.String(common.owner);
+	w.Key("name");
+	w.String(common.name);
+	w.Key("address");
+	w.Uint(common.address);
+	w.Key("port");
+	w.Int(common.port);
+	w.Key("timeout");
+	w.Uint(common.timeout);
+	w.Key("enable_demo");
+	w.Int(common.typeofdemo);
+	w.Key("timeofdemo");
+	w.Int(common.timeofdemo);
+	w.Key("daylightcorrection");
+	w.Int(common.daylightcorrection);
+	w.Key("timezone_real");
+	w.Int(common.timezone_real);
+	w.Key("timezone");
+	w.Int(common.timezone);
+	w.Key("timesync");
+	w.String(common.timesync);
+
+	w.Key("minclient");
+	w.Int(common.minclient);
+	w.Key("minapi");
+	w.Int(common.minapi);
+	w.Key("feeder_timeout");
+	w.Uint(common.feeder_timeout);
+	w.Key("keepemails");
+	w.Int(common.keepemails);
+	w.Key("endhour");
+	w.Int(common.endhour);
+	w.Key("endminute");
+	w.Int(common.endminute);
+
+	w.Key("optimization_time");
+	w.Int(common.optimization_time);
+	w.Key("optimization_lasttime");
+	w.Int(common.optimization_lasttime);
+	w.Key("optimization_counter");
+	w.Int(common.optimization_counter);
+
+	w.Key("antiflood");
+	w.Int(common.antiflood);
+	w.Key("floodcontrol");
+	w.Int(common.floodcontrol);
+	w.Key("liveupdate_mode");
+	w.Int(common.liveupdate_mode);
+
+	w.Key("lastorder");
+	w.Int(common.lastorder);
+	w.Key("lastlogin");
+	w.Int(common.lastlogin);
+	w.Key("lostlogin");
+	w.Int(common.lostlogin);
+
+	w.Key("rollovers_mode");
+	w.Int(common.rollovers_mode);
+
+	w.Key("path_database");
+	w.String(common.path_database);
+	w.Key("path_history");
+	w.String(common.path_history);
+	w.Key("path_log");
+	w.String(common.path_log);
+
+	w.Key("overnight_last_day");
+	w.Uint(common.overnight_last_day);
+	w.Key("overnight_last_time");
+	w.Uint(common.overnight_last_time);
+	w.Key("overnight_prev_time");
+	w.Uint(common.overnight_prev_time);
+
+	w.Key("overmonth_last_month");
+	w.Uint(common.overmonth_last_month);
+
+	w.Key("adapters");
+	w.String(common.adapters);
+	w.Key("bind_adresses");
+	w.StartArray();
+	for (int i = 0; i < 8; i++)
+	{
+		w.Uint(common.bind_adresses[i]);
+	}
+	w.EndArray();
+	w.Key("server_version");
+	w.Int(common.server_version);
+	w.Key("server_build");
+	w.Int(common.server_build);
+	w.Key("web_adresses");
+	w.StartArray();
+	for (int i = 0; i < 8; i++)
+	{
+		w.Uint(common.web_adresses[i]);
+	}
+	w.EndArray();
+	w.Key("statement_mode");
+	w.Int(common.statement_mode);
+	w.Key("monthly_state_mode");
+	w.Int(common.monthly_state_mode);
+	w.Key("keepticks");
+	w.Int(common.keepticks);
+	w.Key("statement_weekend");
+	w.Int(common.statement_weekend);
+	w.Key("last_activate");
+	w.Uint(common.last_activate);
+	w.Key("stop_last");
+	w.Uint(common.stop_last);
+	w.Key("stop_delay");
+	w.Int(common.stop_delay);
+	w.Key("stop_reason");
+	w.Int(common.stop_reason);
+	w.Key("account_url");
+	w.String(common.account_url);
+	w.EndObject();
+
+	json = sb.GetString();
+	return true;
+}
+
+bool Utils::parseFromIPListToJson(const ConAccess ip[], const int size, std::string& json)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+
+	w.StartObject();
+	w.Key("Access-List");
+	w.StartArray();
+	for (int i = 0; i < size; i++)
+	{
+		w.StartObject();
+		w.Key("action");
+		w.Int(ip[i].action);
+		w.Key("from");
+		w.Uint(ip[i].from);
+		w.Key("to");
+		w.Uint(ip[i].to);
+		w.Key("comment");
+		w.String(ip[i].comment);
+		w.EndObject();
+	}
+	w.EndArray();
+	w.EndObject();
+
+	return true;
+}
+
+bool Utils::parseFromSymbolsListToJson(const std::vector<ConSymbol>& symbols, std::string& json)
+{
+	if (symbols.empty())
+		return false;
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+
+	w.StartObject();
+	w.Key("size");
+	w.Int(symbols.size());
+	w.Key("symbols-list");
+	w.StartArray();
+	for (auto& s : symbols)
+	{
+		w.String(s.symbol);
+	}
+	w.EndArray();
+	w.EndObject();
+
+	json = sb.GetString();
+	return true;
+}
+
+bool Utils::parseFromSymbolToJson(const ConSymbol& symbol, std::string& json)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+
+	w.StartObject();
+	w.Key("symbol");
+	w.String(symbol.symbol);
+	w.Key("description");
+	w.String(symbol.description);
+	w.Key("source");
+	w.String(symbol.source);
+	w.Key("currency");
+	w.String(symbol.currency);
+	w.Key("type");
+	w.Int(symbol.type);
+	w.Key("digits");
+	w.Int(symbol.digits);
+	w.Key("trade");
+	w.Int(symbol.trade);
+
+	w.Key("background_color");
+	w.Int(symbol.background_color);
+	w.Key("count");
+	w.Int(symbol.count);
+	w.Key("count_original");
+	w.Int(symbol.count_original);
+
+	w.Key("realtime");
+	w.Int(symbol.realtime);
+	w.Key("starting");
+	w.Uint(symbol.starting);
+	w.Key("expiration");
+	w.Uint(symbol.expiration);
+
+	w.Key("sessions");
+	w.StartArray();
+	for(int i = 0; i < 7; i++)
+	{
+		w.StartObject();
+		w.Key("quote_session");
+		w.StartArray();
+		for (int j = 0; j < 3; j++)
+		{
+			w.StartObject();
+			w.Key("open_hour");
+			w.Int(symbol.sessions[i].quote[j].open_hour);
+			w.Key("open_min");
+			w.Int(symbol.sessions[i].quote[j].open_min);
+			w.Key("close_hour");
+			w.Int(symbol.sessions[i].quote[j].close_hour);
+			w.Key("close_min");
+			w.Int(symbol.sessions[i].quote[j].close_min);
+			w.EndObject();
+		}
+		w.EndArray();
+
+		w.Key("trade_session");
+		w.StartArray();
+		for (int j = 0; j < 3; j++)
+		{
+			w.StartObject();
+			w.Key("open_hour");
+			w.Int(symbol.sessions[i].trade[j].open_hour);
+			w.Key("open_min");
+			w.Int(symbol.sessions[i].trade[j].open_min);
+			w.Key("close_hour");
+			w.Int(symbol.sessions[i].trade[j].close_hour);
+			w.Key("close_min");
+			w.Int(symbol.sessions[i].trade[j].close_min);
+			w.EndObject();
+		}
+		w.EndArray();
+		w.EndObject();
+	}
+	w.EndArray();
+
+	w.Key("profit_mode");
+	w.Int(symbol.profit_mode);
+
+	w.Key("filter");
+	w.Int(symbol.filter);
+
+	w.Key("filter_counter");
+	w.Int(symbol.filter_counter);
+
+	w.Key("filter_limit");
+	w.Double(symbol.filter_limit);
+
+	w.Key("filter_smoothing");
+	w.Int(symbol.filter_smoothing);
+
+	w.Key("logging");
+	w.Int(symbol.logging);
+
+	w.Key("spread");
+	w.Int(symbol.spread);
+
+	w.Key("spread_balance");
+	w.Int(symbol.spread_balance);
+
+	w.Key("exemode");
+	w.Int(symbol.exemode);
+
+	w.Key("swap_enable");
+	w.Int(symbol.swap_enable);
+
+	w.Key("swap_type");
+	w.Int(symbol.swap_type);
+
+	w.Key("swap_long");
+	w.Double(symbol.swap_long);
+
+	w.Key("swap_short");
+	w.Double(symbol.swap_short);
+
+	w.Key("swap_rollover3days");
+	w.Int(symbol.swap_rollover3days);
+
+	w.Key("contract_size");
+	w.Double(symbol.contract_size);
+
+	w.Key("tick_value");
+	w.Double(symbol.tick_value);
+
+	w.Key("tick_size");
+	w.Double(symbol.tick_size);
+	//
+	w.Key("stops_level");
+	w.Int(symbol.stops_level);
+
+	w.Key("gtc_pendings");
+	w.Int(symbol.gtc_pendings);
+
+	w.Key("margin_mode");
+	w.Int(symbol.margin_mode);
+
+	w.Key("margin_initial");
+	w.Double(symbol.margin_initial);
+
+	w.Key("margin_maintenance");
+	w.Double(symbol.margin_maintenance);
+
+	w.Key("margin_hedged");
+	w.Double(symbol.margin_hedged);
+
+	w.Key("margin_divider");
+	w.Double(symbol.margin_divider);
+
+	w.Key("point");
+	w.Double(symbol.point);
+
+	w.Key("multiply");
+	w.Double(symbol.multiply);
+
+	w.Key("bid_tickvalue");
+	w.Double(symbol.bid_tickvalue);
+
+	w.Key("ask_tickvalue");
+	w.Double(symbol.ask_tickvalue);
+
+	w.Key("long_only");
+	w.Int(symbol.long_only);
+
+	w.Key("instant_max_volume");
+	w.Int(symbol.instant_max_volume);
+
+	w.Key("margin_currency");
+	w.String(symbol.margin_currency);
+
+	w.Key("freeze_level");
+	w.Int(symbol.freeze_level);
+
+	w.Key("margin_hedged_strong");
+	w.Int(symbol.margin_hedged_strong);
+
+	w.Key("value_date");
+	w.Uint(symbol.value_date);
+
+	w.Key("quotes_delay");
+	w.Int(symbol.quotes_delay);
+
+	w.Key("swap_openprice");
+	w.Int(symbol.swap_openprice);
+
+	w.Key("swap_variation_margin");
+	w.Int(symbol.swap_variation_margin);
+
+	w.EndObject();
+
+	json = sb.GetString();
+	return true;
+}
+
+bool Utils::parseFromJsonToSymbol(const std::string& json, std::string& symbol)
+{
+	using namespace rapidjson;
+	Document d;
+	if (d.Parse(json.c_str()).HasParseError())
+		return false;
+	if (d.HasMember("symbol") && d["symbol"].IsString())
+	{
+		symbol = d["symbol"].GetString();
+		return true;
+	}
+	else
+		return false;
+}
+
+bool Utils::parseFromDCListToJson(const ConDataServer dc[], const int size, std::string& json)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+
+	w.StartObject();
+	w.Key("DC-List");
+	w.StartArray();
+	for (int i = 0; i < size; i++)
+	{
+		w.StartObject();
+		w.Key("server");
+		w.String(dc[i].server);
+
+		w.Key("ip");
+		w.Uint(dc[i].ip);
+
+		w.Key("description");
+		w.String(dc[i].description);
+
+		w.Key("isproxy");
+		w.Int(dc[i].isproxy);
+
+		w.Key("priority");
+		w.Int(dc[i].priority);
+
+		w.Key("loading");
+		w.Uint(dc[i].loading);
+
+		w.Key("ip_internal");
+		w.Uint(dc[i].ip_internal);
+
+		w.EndObject();
+	}
+	w.EndArray();
+	w.EndObject();
+
+	json = sb.GetString();
+	return true;
+}
+
+bool Utils::parseFromPluginListToJson(const ConPluginParam cp[], const int size, std::string& json)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+
+	w.StartObject();
+	w.Key("Plugin-List");
+	w.StartArray();
+	for (int i = 0; i < size; i++)
+	{
+		w.StartObject();
+		w.Key("plugin");
+		w.StartObject();
+		w.Key("file");
+		w.String(cp[i].plugin.file);
+
+		w.Key("info");
+		w.StartObject();
+		w.Key("name");
+		w.String(cp[i].plugin.info.name);
+		w.Key("version");
+		w.Uint(cp[i].plugin.info.version);
+		w.Key("copyright");
+		w.String(cp[i].plugin.info.copyright);
+		w.EndObject();
+
+		w.Key("enabled");
+		w.Int(cp[i].plugin.enabled);
+
+		w.Key("configurable");
+		w.Int(cp[i].plugin.configurable);
+
+		w.Key("manager_access");
+		w.Int(cp[i].plugin.manager_access);
+
+		w.EndObject();
+		w.Key("params-total");
+		w.Int(cp[i].total);
+		w.Key("params");
+		w.StartArray();
+		for (int j = 0; j < cp[i].total; j++)
+		{
+			w.StartObject();
+			w.Key("name");
+			w.String(cp[i].params[j].name);
+			w.Key("value");
+			w.String(cp[i].params[j].value);
+			w.EndObject();
+		}
+		w.EndArray();
+		w.EndObject();
+	}
+	w.EndArray();
+	w.EndObject();
+
+	json = sb.GetString();
+	return true;
+}
+
+bool Utils::parseFromPerformanceToJson(const PerformanceInfo pi[], const int size, std::string& json)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+
+	w.StartObject();
+	w.Key("Performance");
+	w.StartArray();
+	for (int i = 0; i < size; i++)
+	{
+		w.StartObject();
+		w.Key("ctm");
+		w.Uint(pi[i].ctm);
+		w.Key("users");
+		w.Int(pi[i].users);
+		w.Key("cpu");
+		w.Int(pi[i].cpu);
+		w.Key("freemem");
+		w.Int(pi[i].freemem);
+		w.Key("network");
+		w.Int(pi[i].network);
+		w.Key("sockets");
+		w.Int(pi[i].sockets);
+		w.EndObject();
+	}
+	w.EndArray();
+	w.EndObject();
+	json = sb.GetString();
+	return true;
+}
+bool Utils::parseFromJsonToPerformance(const std::string& json, unsigned int &seconds)
+{
+	using namespace rapidjson;
+	Document d;
+	if (d.Parse(json.c_str()).HasParseError())
+		return false;
+	if (d.HasMember("from") && d["from"].IsUint())
+	{
+		seconds = d["from"].GetUint();
+		return true;
+	}
+	else
+		return false;
+}

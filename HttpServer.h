@@ -9,7 +9,8 @@
 #include "MT4Module.h"
 
 using STATUS = enum { OK, BAD_URL, BAD_METHOD, PARAM_INVALID, SERVER_ERROR};
-using URI = enum {COMMON = 1, PERMISSIONS, ARCHIVING, MARGINS, SECURITIES, SYMBOLS, REPORTS, COMMON_GROUPS, COMMON_SECURITIES, SECURITIES_AUTO_GET, SECURITIES_AUTO_SET, ACCOUNT_CONFIGUTATION};
+using URI = enum {COMMON = 1, PERMISSIONS, ARCHIVING, MARGINS, SECURITIES, SYMBOLS, REPORTS, COMMON_GROUPS, COMMON_SECURITIES, SECURITIES_AUTO_GET, SECURITIES_AUTO_SET, ACCOUNT_CONFIGUTATION,
+                  GLOBAL_DATAFEED, GLOBAL_COMMON, GLOBAL_IP, GLOBAL_SYMBOLS_LIST,GLOBAL_SYMBOL, GLOBAL_DC, GLOBAL_PLUGIN, GLOBAL_PERFORMANCE};
 
 class HttpServer
 {
@@ -55,6 +56,15 @@ private:
 
 	int getAllGroupsSecurities(std::string& des, std::string& response);  //out
 	int setAllGroupsSecurities(std::string& des, std::string& response);
+
+	int getGlobalDatafeed(std::string& des, std::string& response);
+	int getGlobalCommon(std::string& des, std::string& response);
+	int getGlobalIPlist(std::string& des, std::string& response);
+	int getGlobalSymbolsList(std::string& des, std::string& response);
+	int getGlobalSymbol(const std::string& body, std::string& des, std::string& response);
+	int getGlobalDC(std::string& des, std::string& response);
+	int getGlobalPlugin(std::string& des, std::string& response);
+	int getGlobalPerformance(const std::string& body, std::string& des, std::string& response);
 
 	int setAccount(const std::string& body, std::string& des, std::string& response);
 	
