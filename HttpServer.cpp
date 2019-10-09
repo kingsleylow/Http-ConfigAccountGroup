@@ -48,6 +48,8 @@ HttpServer::HttpServer()
 	std::string global_plugin =  Config::getInstance().getHTTPConf().find("plugin-configuration")->second;
 	std::string global_performance =  Config::getInstance().getHTTPConf().find("performance-configuration")->second;
 
+	std::string get_holiday = Config::getInstance().getHTTPConf().find("get-holiday")->second;
+	std::string set_sessions = Config::getInstance().getHTTPConf().find("set-symbol-session")->second;
 	m_uri = { {common, COMMON},
 	{permissions, PERMISSIONS},
 	{archiving, ARCHIVING},
@@ -67,7 +69,9 @@ HttpServer::HttpServer()
 	{global_symbol_conf, GLOBAL_SYMBOL},
 	{global_dc, GLOBAL_DC},
 	{global_plugin, GLOBAL_PLUGIN},
-	{global_performance, GLOBAL_PERFORMANCE} };
+	{global_performance, GLOBAL_PERFORMANCE},
+	{get_holiday, GET_HOLIDAY},
+	{set_sessions, SET_SESSIONS} };
 }
 
 HttpServer::~HttpServer()
@@ -363,8 +367,11 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 		case GLOBAL_PERFORMANCE:
 			res = getGlobalPerformance(body, des, response);
 			break;
+		case SET_SESSIONS:
+			res = setSessions(body, des, response);
+			break;
 		default:
-			des = "bad url";
+			des = "bad url or request method not right";
 			res = BAD_URL;
 			break;
 		}
@@ -424,8 +431,11 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 		case GLOBAL_PLUGIN:
 			res = getGlobalPlugin(des, response);
 			break;
+		case GET_HOLIDAY:
+			res = getHoliday(des, response);
+			break;
 		default:
-			des = "bad url";
+			des = "bad url or request method not right";
 			res = BAD_URL;
 			break;
 		}
@@ -1181,6 +1191,55 @@ int HttpServer::getGlobalPerformance(const std::string& body, std::string& des, 
 	{
 		Logger::getInstance()->error("get performance conf failed.");
 		des = "get performance conf failed.";
+		res = SERVER_ERROR;
+	}
+	return res;
+}
+
+int HttpServer::getHoliday(std::string& des, std::string& response)
+{
+	int res = 0;
+	ConHoliday* ch = nullptr;
+	int total = 0;
+	if (NULL != (ch = m_mt4Conn->getHoliday(total)) &&
+		Utils::getInstance().parseFromHolidayToJson(ch, total, response))
+	{
+		Logger::getInstance()->info("serial conholiday success.");
+		des = "get holiday conf success.";
+		m_mt4Conn->releaseHoliday(ch);
+	}
+	else
+	{
+		Logger::getInstance()->error("get holiday conf failed.");
+		des = "get holiday conf failed.";
+		res = SERVER_ERROR;
+	}
+	return res;
+}
+
+int HttpServer::setSessions(const std::string& body, std::string& des, std::string& response)
+{
+	int res = 0;
+	ConSessions css[7] = {};
+	std::string symbol;
+	if (!body.empty() && Utils::getInstance().parseFromJsonToSession(body, css, symbol))
+	{
+		if (m_mt4Conn->updateSymbolsSessions(symbol, css))
+		{
+			Logger::getInstance()->info("update symbol sessions success.");
+			des = "update symbol sessions success.";
+		}
+		else
+		{
+			Logger::getInstance()->info("update symbol sessions failed.");
+			des = "update symbol sessions failed.";
+			res = SERVER_ERROR;
+		}
+	}
+	else
+	{
+		Logger::getInstance()->error("unserialize sessions failed.");
+		des = "unserialize sessions failed.";
 		res = SERVER_ERROR;
 	}
 	return res;

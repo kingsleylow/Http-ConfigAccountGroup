@@ -10,7 +10,7 @@
 
 using STATUS = enum { OK, BAD_URL, BAD_METHOD, PARAM_INVALID, SERVER_ERROR};
 using URI = enum {COMMON = 1, PERMISSIONS, ARCHIVING, MARGINS, SECURITIES, SYMBOLS, REPORTS, COMMON_GROUPS, COMMON_SECURITIES, SECURITIES_AUTO_GET, SECURITIES_AUTO_SET, ACCOUNT_CONFIGUTATION,
-                  GLOBAL_DATAFEED, GLOBAL_COMMON, GLOBAL_IP, GLOBAL_SYMBOLS_LIST,GLOBAL_SYMBOL, GLOBAL_DC, GLOBAL_PLUGIN, GLOBAL_PERFORMANCE};
+                  GLOBAL_DATAFEED, GLOBAL_COMMON, GLOBAL_IP, GLOBAL_SYMBOLS_LIST,GLOBAL_SYMBOL, GLOBAL_DC, GLOBAL_PLUGIN, GLOBAL_PERFORMANCE, GET_HOLIDAY, SET_SESSIONS};
 
 class HttpServer
 {
@@ -67,6 +67,9 @@ private:
 	int getGlobalPerformance(const std::string& body, std::string& des, std::string& response);
 
 	int setAccount(const std::string& body, std::string& des, std::string& response);
+
+	int getHoliday(std::string& des, std::string& response);
+	int setSessions(const std::string& body, std::string& des, std::string& response);
 	
 	static void readdb(ConGroupSec, int index, std::string, void*);
 private:

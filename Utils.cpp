@@ -1583,3 +1583,127 @@ bool Utils::parseFromJsonToPerformance(const std::string& json, unsigned int &se
 	else
 		return false;
 }
+
+bool Utils::parseFromHolidayToJson(const ConHoliday ch[], const int size, std::string& json)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+
+	w.StartObject();
+	w.Key("Holiday");
+	w.StartArray();
+	for (int i = 0; i < size; i++)
+	{
+		w.StartObject();
+		w.Key("year");
+		w.Int(ch[i].year);
+		w.Key("month");
+		w.Int(ch[i].month);
+		w.Key("day");
+		w.Int(ch[i].day);
+		w.Key("from");
+		w.Int(ch[i].from);
+		w.Key("to");
+		w.Int(ch[i].to);
+		w.Key("symbol");
+		w.String(ch[i].symbol);
+		w.Key("description");
+		w.String(ch[i].description);
+		w.Key("enable");
+		w.Int(ch[i].enable);
+		w.EndObject();
+	}
+	w.EndArray();
+	w.EndObject();
+	json = sb.GetString();
+	return true;
+}
+
+bool Utils::parseFromJsonToSession(const std::string& json, ConSessions (&css)[7], std::string& symbol)
+{
+	if (nullptr == css)
+		return false;
+	using namespace rapidjson;
+	Document d;
+	if (d.Parse(json.c_str()).HasParseError())
+		return false;
+	if (d.HasMember("symbol") && d["symbol"].IsString())
+	{
+		symbol = d["symbol"].GetString();
+	}
+	else
+	{
+		return false;
+	}
+		
+	if (d.HasMember("sessions") && d["sessions"].IsArray())
+	{
+		//for (auto& s : d["sessions"].GetArray())
+		for(int i = 0; i < 7; i++)
+		{
+			if (d["sessions"].GetArray()[i].IsObject())
+			{
+				if (d["sessions"].GetArray()[i].HasMember("quote_session") && d["sessions"].GetArray()[i]["quote_session"].IsArray())
+				{
+					for (int j = 0; j < 3; j++)
+					{
+						if (d["sessions"].GetArray()[i]["quote_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["quote_session"].GetArray()[j].HasMember("open_hour"))
+						{
+							css[i].quote[j].open_hour = d["sessions"].GetArray()[i]["quote_session"].GetArray()[j]["open_hour"].GetInt();
+						}
+						if (d["sessions"].GetArray()[i]["quote_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["quote_session"].GetArray()[j].HasMember("open_min"))
+						{
+							css[i].quote[j].open_min = d["sessions"].GetArray()[i]["quote_session"].GetArray()[j]["open_min"].GetInt();
+						}
+						if (d["sessions"].GetArray()[i]["quote_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["quote_session"].GetArray()[j].HasMember("close_hour"))
+						{
+							css[i].quote[j].close_hour = d["sessions"].GetArray()[i]["quote_session"].GetArray()[j]["close_hour"].GetInt();
+						}
+						if (d["sessions"].GetArray()[i]["quote_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["quote_session"].GetArray()[j].HasMember("close_min"))
+						{
+							css[i].quote[j].close_min = d["sessions"].GetArray()[i]["quote_session"].GetArray()[j]["close_min"].GetInt();
+						}
+					}
+				}
+				else
+				{
+					return false;
+				}
+				if (d["sessions"].GetArray()[i].HasMember("quote_session") && d["sessions"].GetArray()[i]["trade_session"].IsArray())
+				{
+					for (int j = 0; j < 3; j++)
+					{
+						if (d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].HasMember("open_hour"))
+						{
+							css[i].quote[j].open_hour = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["open_hour"].GetInt();
+						}
+						if (d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].HasMember("open_min"))
+						{
+							css[i].quote[j].open_min = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["open_min"].GetInt();
+						}
+						if (d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].HasMember("close_hour"))
+						{
+							css[i].quote[j].close_hour = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["close_hour"].GetInt();
+						}
+						if (d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].HasMember("close_min"))
+						{
+							css[i].quote[j].close_min = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["close_min"].GetInt();
+						}
+					}
+				}
+				else
+				{
+					return false;
+				}
+			}
+			else
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+	else
+		return false;
+}

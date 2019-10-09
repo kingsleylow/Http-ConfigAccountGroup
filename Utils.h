@@ -133,6 +133,9 @@ public:
 	bool parseFromPerformanceToJson(const PerformanceInfo[], const int size, std::string& json);
 	bool parseFromJsonToPerformance(const std::string& json, unsigned int &seconds);
 
+	bool parseFromHolidayToJson(const ConHoliday[], const int size, std::string& json);
+	bool parseFromJsonToSession(const std::string& json, ConSessions(&)[7], std::string& symbol);
+
 private:
 	Utils();
 	~Utils() = default;

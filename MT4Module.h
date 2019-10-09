@@ -56,13 +56,17 @@ public:
 	void releaseGlobalDatafeed(ConFeeder* feeder);
 	ConAccess* getGlobalIPList(int& total);
 	bool getGlobalSymbols(std::vector<ConSymbol>& symbols);
-	bool  MT4Conn::getGlobalSymbols(std::string& symbol, ConSymbol& con);
+	bool getGlobalSymbols(std::string& symbol, ConSymbol& con);
+	bool updateSymbolsSessions(const std::string& symbol, const ConSessions cs[7]);
 	ConDataServer* getGlobalDCList(int& total);
 	void releaseGlobalDCList(ConDataServer*);
 	ConPluginParam* getGlobalPluginList(int& total);
 	void releaseGlobalPluginList(ConPluginParam*);
 	PerformanceInfo* getGlobalPerformance(const time_t from, int& total);
 	void releaseGlobalPerformance(PerformanceInfo*);
+
+	ConHoliday* getHoliday(int& total);
+	void releaseHoliday(ConHoliday* ch);
 
 	ConCommon getGlobalCommon();
 

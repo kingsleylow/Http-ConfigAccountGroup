@@ -800,3 +800,44 @@ void MT4Conn::releaseGlobalPerformance(PerformanceInfo* pi)
 		m_directInter->MemFree(pi);
 	}
 }
+
+ConHoliday* MT4Conn::getHoliday(int& total)
+{
+	ConHoliday *ch = nullptr;
+	if (mt4DirtIsConnected())
+	{
+		ch = m_directInter->CfgRequestHoliday(&total);
+	}
+	return ch;
+}
+
+void MT4Conn::releaseHoliday(ConHoliday* ch)
+{
+	if (mt4DirtIsConnected())
+	{
+		m_directInter->MemFree(ch);
+	}
+}
+
+bool MT4Conn::updateSymbolsSessions(const std::string& symbol, const ConSessions cs[7])
+{
+	ConSymbol csConf = {};
+	if (mt4DirtIsConnected())
+	{
+		if (!getGlobalSymbols(const_cast<std::string&>(symbol), csConf))
+			return false;
+
+		memcpy(csConf.sessions, cs, sizeof(ConSessions) * 7);
+
+		int res = RET_OK;
+		if (RET_OK == (res = m_directInter->CfgUpdateSymbol(&csConf)))
+		{
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+	return false;
+}
