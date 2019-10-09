@@ -1601,3 +1601,373 @@ http://localhost:9000/global/performance/conf
     }
 }
 ```
+
+##### 26. Get Server Holiday Info
++ Method:POST
++ Uri: read from the configuration file, default is /get/holiday
++ Params: None
+
++ Request example
+```
+http://localhost:9000/get/holiday
+```
++ Response example
+```
+{
+    "code": 0,
+    "description": "get holiday conf success.",
+    "response": {
+        "Holiday": [
+            {
+                "year": 2014,
+                "month": 12,
+                "day": 24,
+                "from": 0,
+                "to": 1230,
+                "symbol": "Forex",
+                "description": "Christmas Day",
+                "enable": 1
+            },
+            {
+                "year": 2014,
+                "month": 12,
+                "day": 24,
+                "from": 0,
+                "to": 1230,
+                "symbol": "Forex-2",
+                "description": "Christmas Day",
+                "enable": 1
+            },
+            {
+                "year": 2014,
+                "month": 12,
+                "day": 24,
+                "from": 0,
+                "to": 1230,
+                "symbol": "XAUUSD",
+                "description": "Christmas Day",
+                "enable": 1
+            }
+        ]
+    }
+}
+```
+
+##### 27. Update Symbol Session Info
++ Method:POST
++ Uri: read from the configuration file, default is /set/symbol/session
++ Params: 
+```
+{
+"symbol":"AUDCAD400",
+"sessions": [
+            {
+                "quote_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ],
+                "trade_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ]
+            },
+            {
+                "quote_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 5,
+                        "close_hour": 23,
+                        "close_min": 55
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ],
+                "trade_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 5,
+                        "close_hour": 23,
+                        "close_min": 55
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ]
+            },
+            {
+                "quote_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 5,
+                        "close_hour": 23,
+                        "close_min": 55
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ],
+                "trade_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 5,
+                        "close_hour": 23,
+                        "close_min": 55
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ]
+            },
+            {
+                "quote_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 5,
+                        "close_hour": 23,
+                        "close_min": 55
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ],
+                "trade_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 5,
+                        "close_hour": 23,
+                        "close_min": 55
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ]
+            },
+            {
+                "quote_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 5,
+                        "close_hour": 23,
+                        "close_min": 55
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ],
+                "trade_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 5,
+                        "close_hour": 23,
+                        "close_min": 55
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ]
+            },
+            {
+                "quote_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 5,
+                        "close_hour": 23,
+                        "close_min": 55
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ],
+                "trade_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 5,
+                        "close_hour": 23,
+                        "close_min": 55
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ]
+            },
+            {
+                "quote_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ],
+                "trade_session": [
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    },
+                    {
+                        "open_hour": 0,
+                        "open_min": 0,
+                        "close_hour": 0,
+                        "close_min": 0
+                    }
+                ]
+            }
+        ]
+}
+```
+
++ Request example
+```
+http://localhost:9000/get/holiday
+```
++ Response example
+```
+{
+    "code": 0,
+    "description": "update symbol sessions success.",
+    "response": {}
+}
+```
