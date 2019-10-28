@@ -192,7 +192,7 @@ bool MT4Conn::mt4DirtIsConnected()
 
 bool MT4Conn::createDirectConnToMT4(CManagerInterface* manager)
 {
-	if (mt4Login(std::stod(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
+	if (mt4Login(std::stoi(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
 		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), m_directInter))
 		return true;
 	else
@@ -210,7 +210,7 @@ bool MT4Conn::createPumpConnToMT4(CManagerInterface* manager)
 		return false;
 
 
-	if (mt4Login(std::stod(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
+	if (mt4Login(std::stoi(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
 		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), m_pumpInter) &&
 		switchToPumpMode(m_pumpInter))
 		return true;
@@ -222,9 +222,9 @@ bool MT4Conn::createConnToMT4()
 {
 	if (!mt4Init())
 		return false;
-	if (mt4Login(std::stod(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
+	if (mt4Login(std::stoi(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
 		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), m_directInter) &&
-		mt4Login(std::stod(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
+		mt4Login(std::stoi(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
 			Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), m_pumpInter) &&
 		switchToPumpMode(m_pumpInter))
 	{
@@ -557,6 +557,7 @@ bool MT4Conn::updateGroupArchive(const std::string group, const GroupArchive& ar
 		Logger::getInstance()->error("update group margin failed.{}", m_directInter->ErrorDescription(res));
 		return false;
 	}
+	return true;
 }
 
 GroupReport MT4Conn::getGroupReport(const std::string& group)
@@ -601,6 +602,7 @@ bool MT4Conn::upateGroupReport(const std::string group, const GroupReport& repor
 		Logger::getInstance()->error("update group margin failed.{}", m_directInter->ErrorDescription(res));
 		return false;
 	}
+	return true;
 }
 
 GroupPermission MT4Conn::getGroupPermission(const std::string& group)
@@ -657,6 +659,7 @@ bool MT4Conn::updateGroupPerssion(const std::string group, const GroupPermission
 		Logger::getInstance()->error("update group margin failed.{}", m_directInter->ErrorDescription(res));
 		return false;
 	}
+	return true;
 }
 
 bool MT4Conn::updateAccounts(const std::string login, const AccountConfiguration& configuration)

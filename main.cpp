@@ -4,21 +4,18 @@
 #include "Config.h"
 #include "MT4Module.h"
 #include <iostream>
-#include <windows.h>
+#include <Windows.h>
+//#define MY_DEBUG
 
+#define SLEEP_TIME 1000
 SERVICE_STATUS servicestatus;
-
 SERVICE_STATUS_HANDLE hstatus;
 
-void __stdcall ServiceMain(int argc, char** argv);
-
-void __stdcall CtrlHandler(DWORD request);
-
+void WINAPI CtrlHandler(DWORD request);
 int start_service();
+bool brun;
 
-bool brun = false;
-
-void __stdcall ServiceMain(int argc, char** argv)
+void WINAPI ServiceMain(int argc, char** argv)
 {
 	servicestatus.dwServiceType = SERVICE_WIN32;
 
@@ -50,7 +47,7 @@ void __stdcall ServiceMain(int argc, char** argv)
 	}
 
 	while (!brun) {
-		Sleep(1000);
+		Sleep(SLEEP_TIME);
 	}
 }
 

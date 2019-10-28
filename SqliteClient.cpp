@@ -57,6 +57,7 @@ bool SqliteClient::init()
 		{
 			return initCached();
 		}
+		return true;
 	}
 	else
 	{

@@ -952,6 +952,7 @@ bool Utils::addIntArray(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson
 		auto a = obj[key.c_str()].GetArray();
 		for (int i = 0; i < size; i++)
 			value[i] = a[i].GetInt();
+		return true;
 	}
 	else
 		return false;
