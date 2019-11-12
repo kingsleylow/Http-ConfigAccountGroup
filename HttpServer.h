@@ -4,9 +4,15 @@
 #include "event2/thread.h"
 #include "event2/keyvalq_struct.h"
 #include "event2/buffer.h"
+#include "event2/bufferevent.h"
+#include "event2/bufferevent_ssl.h"
+#include "event2/util.h"
 #include <string>
 #include <map>
 #include "MT4Module.h"
+#include "openssl/ssl.h"
+#include "openssl/err.h"
+#include "openssl/crypto.h"
 
 using STATUS = enum { OK, BAD_URL, BAD_METHOD, PARAM_INVALID, SERVER_ERROR};
 using URI = enum {COMMON = 1, PERMISSIONS, ARCHIVING, MARGINS, SECURITIES, SYMBOLS, REPORTS, COMMON_GROUPS, COMMON_SECURITIES, SECURITIES_AUTO_GET, SECURITIES_AUTO_SET, ACCOUNT_CONFIGUTATION,
@@ -18,14 +24,19 @@ public:
 	HttpServer();
 	~HttpServer();
 
-	bool init();
+	bool initServerHttp();
 	int  stopServer();
 	int  startServer();
 
 	void setMT4Conn(MT4Conn* conn);
 
 private:
+	static void *my_zeroing_malloc(size_t howmuch);
 	static void cbFunc(struct evhttp_request *, void *args);
+	bool serverSetupCerts(SSL_CTX* ctx, const char* certificate_chain, const char* private_key);
+	void loginCb(struct evhttp_request* req, void* arg);
+	static bufferevent* bevCb(event_base* base, void* arg);
+
 	bool parseReq(struct evhttp_request* req, evhttp_cmd_type& method, std::string& uri, std::map<std::string, std::string>& uriArgs , std::string& body);
 	int  handleReq(const evhttp_cmd_type& method, const std::string& uri, const std::map<std::string, std::string>& uriArgs, const std::string& body,std::string& des, std::string& response);
 
@@ -75,6 +86,8 @@ private:
 private:
 	struct event_base* m_evBase;
 	struct evhttp* m_http;
+	SSL_CTX* m_ctx;
+	EC_KEY* m_ecdh;
 	std::map<evhttp_cmd_type, std::string> m_httpMethod;
 	std::map<std::string, URI> m_uri;
 	MT4Conn* m_mt4Conn;

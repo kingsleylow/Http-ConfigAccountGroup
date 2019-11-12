@@ -79,50 +79,157 @@ HttpServer::~HttpServer()
 
 }
 
-void HttpServer::setMT4Conn(MT4Conn* conn)
+void *HttpServer::my_zeroing_malloc(size_t howmuch)
 {
-	m_mt4Conn = conn;
+	return calloc(1, howmuch);
 }
 
-bool HttpServer::init()
+bool HttpServer::initServerHttp()
 {
 	WSADATA wsaData;
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
 
 	evthread_use_windows_threads();
 
+	CRYPTO_set_mem_functions(HttpServer::my_zeroing_malloc, realloc, free);
+	SSL_library_init();
+	SSL_load_error_strings();
+	OpenSSL_add_all_algorithms();
+	Logger::getInstance()->info("Using OpenSSL version [{}], libevent version [{}]", SSLeay_version(SSLEAY_VERSION), event_get_version());
+
 	m_evBase = event_base_new();
-	if (nullptr == m_evBase)
+	if (m_evBase == nullptr)
 	{
-		Logger::getInstance()->error("event_base_new failed.");
+		Logger::getInstance()->error("Couldn't create an event_base: exiting");
 		return false;
 	}
 
 	m_http = evhttp_new(m_evBase);
 	if (nullptr == m_http)
 	{
-		Logger::getInstance()->error("evhttp_new failed.");
-		event_base_free(m_evBase);
-		m_evBase = nullptr;
+		Logger::getInstance()->error("Couldn't create evhttp: exiting");
 		return false;
 	}
+
+	m_ctx = SSL_CTX_new(SSLv23_server_method());
+	SSL_CTX_set_options(m_ctx, SSL_OP_SINGLE_DH_USE | SSL_OP_SINGLE_ECDH_USE |SSL_OP_NO_SSLv2);
+
+	m_ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+	if (nullptr == m_ecdh)
+	{
+		Logger::getInstance()->error("EC_KEY_new_by_curve_name failed.");
+		return false;
+	}
+
+	if (1 != SSL_CTX_set_tmp_ecdh(m_ctx, m_ecdh))
+	{
+		Logger::getInstance()->error("SSL_CTX_set_tmp_ecdh failed.");
+		return false;
+	}
+
+	std::string path = Config::getInstance().getExePath();
+	std::string certificate_chain = path + Config::getInstance().getHTTPConf().find("certificate")->second;
+	std::string private_key = path + Config::getInstance().getHTTPConf().find("private_key")->second;
+	
+	if (!serverSetupCerts(m_ctx, certificate_chain.c_str(), private_key.c_str()))
+	{
+		Logger::getInstance()->error("setup certificate failed.exit...");
+		return false;
+	}
+
+	evhttp_set_bevcb(m_http, bevCb, m_ctx);
 
 	evhttp_set_gencb(m_http, HttpServer::cbFunc, this);
 
 	std::string port = Config::getInstance().getHTTPConf().find("port")->second;
 	struct evhttp_bound_socket *handle = evhttp_bind_socket_with_handle(m_http, "0.0.0.0", std::stoi(port));
-
 	if (nullptr == handle)
 	{
-		Logger::getInstance()->error("evhttp_bind_socket failed.");
-		evhttp_free(m_http);
-		m_http = nullptr;
-		event_base_free(m_evBase);
-		m_evBase = nullptr;
+		Logger::getInstance()->error("Couldn't bind to port {}. Exiting.", port);
 		return false;
 	}
-	Logger::getInstance()->info("http server listen port {}", port);
 	return true;
+}
+
+bool HttpServer::serverSetupCerts(SSL_CTX* ctx, const char* certificate_chain, const char* private_key)
+{
+	Logger::getInstance()->info("Loading certificate chain from {} and private key from {}", certificate_chain, private_key);
+	if (1 != SSL_CTX_use_certificate_chain_file(ctx, certificate_chain))
+	{
+		Logger::getInstance()->error("SSL_CTX_use_certificate_chain_file failed.");
+		return false;
+	}
+	if (1 != SSL_CTX_use_PrivateKey_file(ctx, private_key, SSL_FILETYPE_PEM))
+	{
+		Logger::getInstance()->error("SSL_CTX_use_PrivateKey_file failed.");
+		return false;
+	}
+	if (1 != SSL_CTX_check_private_key(ctx))
+	{
+		Logger::getInstance()->error("SSL_CTX_check_private_key failed.");
+		return false;
+	}
+	return true;
+}
+
+void HttpServer::loginCb(evhttp_request* req, void* arg)
+{
+	const char* uri = evhttp_request_get_uri(req);
+
+	if (EVHTTP_REQ_GET == evhttp_request_get_command(req))
+	{
+		evbuffer* buf = evbuffer_new();
+		if (nullptr == buf)
+			return;
+		evbuffer_add_printf(buf, "Requested: %s\n", uri);
+		evhttp_send_reply(req, HTTP_OK, "OK", buf);
+		return;
+	}
+
+	if (EVHTTP_REQ_POST == evhttp_request_get_command(req))
+	{
+		evhttp_send_reply(req, 200, "OK", NULL);
+		Logger::getInstance()->info("Got a POST request for <{}>", uri);
+		return;
+	}
+
+	evhttp_uri *decoded = evhttp_uri_parse(uri);
+	if (nullptr == decoded)
+	{
+		evhttp_send_error(req, HTTP_BADREQUEST, 0);
+		return;
+	}
+
+	evbuffer* buf = evhttp_request_get_input_buffer(req);
+	evbuffer_add(buf, "", 1);
+	char* payload = (char*)evbuffer_pullup(buf, -1);
+	int post_data_len = evbuffer_get_length(buf);
+	Logger::getInstance()->info("[post_data:len{}]={}",post_data_len, payload);
+
+	evhttp_add_header(evhttp_request_get_output_headers(req), "Server", "HttpSignature");
+	evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "text/plain");
+	evhttp_add_header(evhttp_request_get_output_headers(req), "Connection", "close");
+
+	evbuffer* evb = evbuffer_new();
+	evbuffer_add_printf(evb, "%s", "hello world");
+	evhttp_send_reply(req, HTTP_OK, "OK", evb);
+
+	if (decoded)
+		evhttp_uri_free(decoded);
+	if (evb)
+		evbuffer_free(evb);
+}
+
+bufferevent* HttpServer::bevCb(event_base* base, void* arg)
+{
+	SSL_CTX* ctx = (SSL_CTX*)arg;
+	bufferevent* r = bufferevent_openssl_socket_new(base, -1, SSL_new(ctx), BUFFEREVENT_SSL_ACCEPTING, BEV_OPT_CLOSE_ON_FREE);
+	return r;
+}
+
+void HttpServer::setMT4Conn(MT4Conn* conn)
+{
+	m_mt4Conn = conn;
 }
 
 void HttpServer::cbFunc(struct evhttp_request *req, void *args)
@@ -154,7 +261,7 @@ void HttpServer::cbFunc(struct evhttp_request *req, void *args)
 	}
 
 	rapidjson::StringBuffer sb;
-	rapidjson::PrettyWriter<rapidjson::StringBuffer> w(sb);
+	rapidjson::Writer<rapidjson::StringBuffer> w(sb);
 	w.StartObject();
 
 	w.Key("code");
@@ -187,7 +294,7 @@ void HttpServer::cbFunc(struct evhttp_request *req, void *args)
 	evhttp_add_header(oh, "Content-length", std::to_string(resp.size()).c_str());
 
 	evbuffer_add_printf(evb, "%s", resp.c_str());
-	Logger::getInstance()->info("response: {}", resp);
+	Logger::getInstance()->info("response [{}]", resp);
 
 	switch (res)
 	{
@@ -316,7 +423,7 @@ bool HttpServer::parseReq(struct evhttp_request* req, evhttp_cmd_type& method, s
 				body.append(cbuf, n);
 			}
 		}
-		Logger::getInstance()->info("request method:{}, uri:{}, body:{}", m_httpMethod[method], pUri, body);
+		Logger::getInstance()->info("request [method:{}, uri:{}, body:{}]", m_httpMethod[method], pUri, body);
 	} while (0);
 
 	if (pDecodedUrl)

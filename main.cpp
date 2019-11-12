@@ -5,7 +5,7 @@
 #include "MT4Module.h"
 #include <iostream>
 #include <Windows.h>
-//#define MY_DEBUG
+#define MY_DEBUG
 
 #define SLEEP_TIME 1000
 SERVICE_STATUS servicestatus;
@@ -89,7 +89,7 @@ int start_service()
 	}
 
 	HttpServer http;
-	if (!http.init())
+	if (!http.initServerHttp())
 	{
 		Logger::getInstance()->error("http server init failed.");
 		std::cout << "http server init failed." << std::endl;
