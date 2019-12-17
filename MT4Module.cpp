@@ -672,7 +672,7 @@ bool MT4Conn::updateAccounts(const std::string login, const AccountConfiguration
 	int ret = m_pumpInter->UserRecordGet(_login, &ur);
 	if (ret == RET_OK)
 	{
-		strncpy(ur.password, configuration.password.c_str(), configuration.password.length()+1);
+		strncpy_s(ur.password, sizeof(ur.password), configuration.password.c_str(), configuration.password.length()+1);
 		ur.enable_change_password = configuration.enable_change_password;
 		if (RET_OK != (ret = m_directInter->UserRecordUpdate(&ur)))
 		{
@@ -843,4 +843,43 @@ bool MT4Conn::updateSymbolsSessions(const std::string& symbol, const ConSessions
 		}
 	}
 	return false;
+}
+
+bool MT4Conn::setSymbolSwap(std::string symbol, int swap_long, int swap_short, int swap_enable, int swap_rollover3days)
+{
+	ConSymbol cs = {0};
+	bool found = false;
+	for (auto& c : m_SymbolsInfo)
+	{
+		if (std::string(c.second.symbol).compare(symbol) == 0)
+		{
+			cs = c.second;
+			found = true;
+			break;
+		}
+	}
+	if (!found)
+	{
+		return false;
+	}
+	else
+	{
+		cs.swap_long = swap_long;
+		cs.swap_short = swap_short;
+		if (swap_enable != -1)
+			cs.swap_enable = swap_enable;
+		if (swap_rollover3days != -1)
+			cs.swap_rollover3days = swap_rollover3days;
+
+		int code = m_directInter->CfgUpdateSymbol(&cs);
+		if (code != RET_OK)
+		{
+			Logger::getInstance()->error("update swap failed. error {}", m_directInter->ErrorDescription(code));
+			return false;
+		}
+		else
+		{
+			return true;
+		}
+	}
 }

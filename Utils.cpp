@@ -1708,3 +1708,56 @@ bool Utils::parseFromJsonToSession(const std::string& json, ConSessions (&css)[7
 	else
 		return false;
 }
+
+bool Utils::parseFromJsonToSwap(const std::string& body, std::string& symbol, int& swap_long, int& swap_short, int& swap_enable, int& swap_rollover)
+{
+	using namespace rapidjson;
+	Document d;
+	if (d.Parse(body.c_str()).HasParseError())
+		return false;
+	if (d.HasMember("symbol") && d["symbol"].IsString())
+	{
+		symbol = d["symbol"].GetString();
+	}
+	else
+	{
+		return false;
+	}
+
+	if (d.HasMember("swap_long") && d["swap_long"].IsInt())
+	{
+		swap_long = d["swap_long"].GetInt();
+	}
+	else
+	{
+		return false;
+	}
+
+	if (d.HasMember("swap_short") && d["swap_short"].IsInt())
+	{
+		swap_short = d["swap_short"].GetInt();
+	}
+	else
+	{
+		return false;
+	}
+
+	if (d.HasMember("swap_enable") && d["swap_enable"].IsInt())
+	{
+		swap_enable = d["swap_enable"].GetInt();
+	}
+	else
+	{
+		return false;
+	}
+
+	if (d.HasMember("swap_rollover3days") && d["swap_rollover3days"].IsInt())
+	{
+		swap_rollover = d["swap_rollover3days"].GetInt();
+	}
+	else
+	{
+		return false;
+	}
+	return true;
+}

@@ -50,6 +50,7 @@ HttpServer::HttpServer()
 
 	std::string get_holiday = Config::getInstance().getHTTPConf().find("get-holiday")->second;
 	std::string set_sessions = Config::getInstance().getHTTPConf().find("set-symbol-session")->second;
+	std::string set_swap = Config::getInstance().getHTTPConf().find("set-swap")->second;
 	m_uri = { {common, COMMON},
 	{permissions, PERMISSIONS},
 	{archiving, ARCHIVING},
@@ -71,7 +72,8 @@ HttpServer::HttpServer()
 	{global_plugin, GLOBAL_PLUGIN},
 	{global_performance, GLOBAL_PERFORMANCE},
 	{get_holiday, GET_HOLIDAY},
-	{set_sessions, SET_SESSIONS} };
+	{set_sessions, SET_SESSIONS} ,
+	{set_swap, SET_SWAP} };
 }
 
 HttpServer::~HttpServer()
@@ -91,11 +93,11 @@ bool HttpServer::initServerHttp()
 
 	evthread_use_windows_threads();
 
-	CRYPTO_set_mem_functions(HttpServer::my_zeroing_malloc, realloc, free);
-	SSL_library_init();
-	SSL_load_error_strings();
-	OpenSSL_add_all_algorithms();
-	Logger::getInstance()->info("Using OpenSSL version [{}], libevent version [{}]", SSLeay_version(SSLEAY_VERSION), event_get_version());
+	//CRYPTO_set_mem_functions(HttpServer::my_zeroing_malloc, realloc, free);
+	//SSL_library_init();
+	//SSL_load_error_strings();
+	//OpenSSL_add_all_algorithms();
+	//Logger::getInstance()->info("Using OpenSSL version [{}], libevent version [{}]", SSLeay_version(SSLEAY_VERSION), event_get_version());
 
 	m_evBase = event_base_new();
 	if (m_evBase == nullptr)
@@ -111,33 +113,33 @@ bool HttpServer::initServerHttp()
 		return false;
 	}
 
-	m_ctx = SSL_CTX_new(SSLv23_server_method());
-	SSL_CTX_set_options(m_ctx, SSL_OP_SINGLE_DH_USE | SSL_OP_SINGLE_ECDH_USE |SSL_OP_NO_SSLv2);
+	//m_ctx = SSL_CTX_new(SSLv23_server_method());
+	//SSL_CTX_set_options(m_ctx, SSL_OP_SINGLE_DH_USE | SSL_OP_SINGLE_ECDH_USE |SSL_OP_NO_SSLv2);
 
-	m_ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
-	if (nullptr == m_ecdh)
-	{
-		Logger::getInstance()->error("EC_KEY_new_by_curve_name failed.");
-		return false;
-	}
+	//m_ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+	//if (nullptr == m_ecdh)
+	//{
+	//	Logger::getInstance()->error("EC_KEY_new_by_curve_name failed.");
+	//	return false;
+	//}
 
-	if (1 != SSL_CTX_set_tmp_ecdh(m_ctx, m_ecdh))
-	{
-		Logger::getInstance()->error("SSL_CTX_set_tmp_ecdh failed.");
-		return false;
-	}
+	//if (1 != SSL_CTX_set_tmp_ecdh(m_ctx, m_ecdh))
+	//{
+	//	Logger::getInstance()->error("SSL_CTX_set_tmp_ecdh failed.");
+	//	return false;
+	//}
 
-	std::string path = Config::getInstance().getExePath();
-	std::string certificate_chain = path + Config::getInstance().getHTTPConf().find("certificate")->second;
-	std::string private_key = path + Config::getInstance().getHTTPConf().find("private_key")->second;
-	
-	if (!serverSetupCerts(m_ctx, certificate_chain.c_str(), private_key.c_str()))
-	{
-		Logger::getInstance()->error("setup certificate failed.exit...");
-		return false;
-	}
+	//std::string path = Config::getInstance().getExePath();
+	//std::string certificate_chain = path + Config::getInstance().getHTTPConf().find("certificate")->second;
+	//std::string private_key = path + Config::getInstance().getHTTPConf().find("private_key")->second;
+	//
+	//if (!serverSetupCerts(m_ctx, certificate_chain.c_str(), private_key.c_str()))
+	//{
+	//	Logger::getInstance()->error("setup certificate failed.exit...");
+	//	return false;
+	//}
 
-	evhttp_set_bevcb(m_http, bevCb, m_ctx);
+	//evhttp_set_bevcb(m_http, bevCb, m_ctx);
 
 	evhttp_set_gencb(m_http, HttpServer::cbFunc, this);
 
@@ -239,7 +241,7 @@ void HttpServer::cbFunc(struct evhttp_request *req, void *args)
 
 	std::string strMessage;
 	std::map<std::string, std::string> mapParams;
-	evhttp_cmd_type eRequestType;
+	//evhttp_cmd_type eRequestType;
 
 	std::string uri;
 	evhttp_cmd_type method;
@@ -476,6 +478,9 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 			break;
 		case SET_SESSIONS:
 			res = setSessions(body, des, response);
+			break;
+		case SET_SWAP:
+			res = setSwap(body, des, response);
 			break;
 		default:
 			des = "bad url or request method not right";
@@ -1066,7 +1071,7 @@ int HttpServer::setAllGroupsSecurities(std::string& des, std::string& response)
 			cs.comm_type = std::stoi(r.at(15));
 			cs.comm_lots = std::stoi(r.at(16));
 			cs.comm_agent = std::stoi(r.at(17));
-			cs.comm_agent_type = std::stod(r.at(18));
+			cs.comm_agent_type = std::stoi(r.at(18));
 			cs.comm_tax = std::stod(r.at(19));
 			cs.comm_agent_lots = std::stoi(r.at(20));
 			cs.trade_rights = std::stoi(r.at(21));
@@ -1347,6 +1352,37 @@ int HttpServer::setSessions(const std::string& body, std::string& des, std::stri
 	{
 		Logger::getInstance()->error("unserialize sessions failed.");
 		des = "unserialize sessions failed.";
+		res = SERVER_ERROR;
+	}
+	return res;
+}
+
+int HttpServer::setSwap(const std::string& body, std::string& des, std::string& response)
+{
+	int res = 0;
+	std::string symbol;
+	int swap_long = 0;
+	int swap_short = 0;
+	int swap_enable = 0;
+	int swap_rollover = 0;
+	if (!body.empty() && Utils::getInstance().parseFromJsonToSwap(body, symbol, swap_long, swap_short, swap_enable, swap_rollover))
+	{
+		if (m_mt4Conn->setSymbolSwap(symbol, swap_long, swap_short, swap_enable, swap_rollover))
+		{
+			Logger::getInstance()->info("update symbol swap success.");
+			des = "update symbol swap success.";
+		}
+		else
+		{
+			Logger::getInstance()->info("update symbol swap failed.");
+			des = "update symbol swap failed.";
+			res = SERVER_ERROR;
+		}
+	}
+	else
+	{
+		Logger::getInstance()->error("unserialize swap failed.");
+		des = "unserialize swap failed.";
 		res = SERVER_ERROR;
 	}
 	return res;

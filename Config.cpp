@@ -8,6 +8,7 @@ Config::Config()
 {
 	m_confKey["mt4-conn"] = Conf::MT4_CONN_CONF;
 	m_confKey["httpserver-conn"] = Conf::HTTP_CONN_CONF;
+	m_confKey["email"] = Conf::EMAIL_CONF;
 }
 
 bool Config::readConf(const std::string& conf)
@@ -96,6 +97,9 @@ void Config::readAppNode(xml_node<> * node)
 		case Conf::HTTP_CONN_CONF:
 			m_HTTPConf[n->name()] = n->value();
 			break;
+		case Conf::EMAIL_CONF:
+			m_emailConf[n->name()] = n->value();
+			break;
 		default:
 			break;
 		}
@@ -113,6 +117,11 @@ void Config::showConf()
 	}
 	ofs << "--------http conn conf---------" << std::endl;
 	for (auto &c : m_HTTPConf)
+	{
+		ofs << c.first << ":" << c.second << std::endl;
+	}
+	ofs << "--------email conf---------" << std::endl;
+	for (auto &c : m_emailConf)
 	{
 		ofs << c.first << ":" << c.second << std::endl;
 	}

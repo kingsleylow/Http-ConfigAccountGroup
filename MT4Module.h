@@ -70,6 +70,7 @@ public:
 
 	ConCommon getGlobalCommon();
 
+	bool setSymbolSwap(std::string symbol, int swap_long, int swap_short, int swap_enable=-1,int swap_rollover3days =-1);
 private:
 	bool storeGroupsInfo();
 	bool storeSymbolsInfo();

@@ -8,6 +8,7 @@ add_definitions(-DEVENT__HAVE_OPENSSL)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4003")
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR}/include/curl)
 include_directories(${CMAKE_SOURCE_DIR}/include/libevent)
 include_directories(${CMAKE_SOURCE_DIR}/include/libevent/event2)
 
@@ -32,7 +33,7 @@ add_executable(${PROJECT_NAME} ${SRC_LIST} ${headers})
 #set_property(TARGET libevent_extras PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/lib/libevent/libevent_extras.lib)
 
 
-target_link_libraries(${PROJECT_NAME} ws2_32 event event_core event_extra event_openssl libeay32 ssleay32 sqlite3 libcurl)
+target_link_libraries(${PROJECT_NAME} ws2_32 event event_core event_extra event_openssl libeay32 ssleay32 sqlite3 libcurl_debug)
 if(CMAKE_BUILD_TYPE MATCHES "Release")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(OUT "Release")

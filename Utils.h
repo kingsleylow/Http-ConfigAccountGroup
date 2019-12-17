@@ -136,6 +136,8 @@ public:
 	bool parseFromHolidayToJson(const ConHoliday[], const int size, std::string& json);
 	bool parseFromJsonToSession(const std::string& json, ConSessions(&)[7], std::string& symbol);
 
+	bool parseFromJsonToSwap(const std::string& body, std::string& symbol, int& swap_long, int& swap_short, int& swap_enable, int& swap_rollover);
+
 private:
 	Utils();
 	~Utils() = default;
