@@ -1,11 +1,10 @@
-#include <iostream>
 #include "HttpServer.h"
 #include "Logger.h"
 #include "Config.h"
 #include "MT4Module.h"
 #include <iostream>
 #include <Windows.h>
-#define MY_DEBUG
+//#define MY_DEBUG
 
 #define SLEEP_TIME 1000
 SERVICE_STATUS servicestatus;

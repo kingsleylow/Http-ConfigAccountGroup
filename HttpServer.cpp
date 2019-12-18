@@ -51,6 +51,7 @@ HttpServer::HttpServer()
 	std::string get_holiday = Config::getInstance().getHTTPConf().find("get-holiday")->second;
 	std::string set_sessions = Config::getInstance().getHTTPConf().find("set-symbol-session")->second;
 	std::string set_swap = Config::getInstance().getHTTPConf().find("set-swap")->second;
+	std::string modify_open_price = Config::getInstance().getHTTPConf().find("modify-open_price")->second;
 	m_uri = { {common, COMMON},
 	{permissions, PERMISSIONS},
 	{archiving, ARCHIVING},
@@ -73,7 +74,8 @@ HttpServer::HttpServer()
 	{global_performance, GLOBAL_PERFORMANCE},
 	{get_holiday, GET_HOLIDAY},
 	{set_sessions, SET_SESSIONS} ,
-	{set_swap, SET_SWAP} };
+	{set_swap, SET_SWAP},
+	{modify_open_price, MODIFY_OPENPRICE} };
 }
 
 HttpServer::~HttpServer()
@@ -481,6 +483,9 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 			break;
 		case SET_SWAP:
 			res = setSwap(body, des, response);
+			break;
+		case MODIFY_OPENPRICE:
+			res = modifyOpenPrice(body, des, response);
 			break;
 		default:
 			des = "bad url or request method not right";
@@ -1383,6 +1388,34 @@ int HttpServer::setSwap(const std::string& body, std::string& des, std::string& 
 	{
 		Logger::getInstance()->error("unserialize swap failed.");
 		des = "unserialize swap failed.";
+		res = SERVER_ERROR;
+	}
+	return res;
+}
+
+int HttpServer::modifyOpenPrice(const std::string& body, std::string& des, std::string& response)
+{
+	int res = 0;
+	int orderNo = 0;
+	double profit = 0;
+	if (!body.empty() && Utils::getInstance().parseFromJsonToOpenPrice(body, orderNo, profit))
+	{
+		if (m_mt4Conn->updateOrderOpenPrice(orderNo, profit))
+		{
+			Logger::getInstance()->info("update order open_price success.");
+			des = "update order open_price success.";
+		}
+		else
+		{
+			Logger::getInstance()->info("update order open_price failed.");
+			des = "update order open_price failed.";
+			res = SERVER_ERROR;
+		}
+	}
+	else
+	{
+		Logger::getInstance()->error("unserialize order open_price failed.");
+		des = "unserialize order open_price failed.";
 		res = SERVER_ERROR;
 	}
 	return res;

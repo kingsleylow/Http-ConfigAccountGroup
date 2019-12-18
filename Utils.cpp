@@ -1761,3 +1761,29 @@ bool Utils::parseFromJsonToSwap(const std::string& body, std::string& symbol, in
 	}
 	return true;
 }
+
+bool Utils::parseFromJsonToOpenPrice(const std::string& body, int& orderNo, double& profit)
+{
+	using namespace rapidjson;
+	Document d;
+	if (d.Parse(body.c_str()).HasParseError())
+		return false;
+	if (d.HasMember("orderNo") && d["orderNo"].IsString())
+	{
+		orderNo = std::stoi(d["orderNo"].GetString());
+	}
+	else
+	{
+		return false;
+	}
+
+	if (d.HasMember("profit") && d["profit"].IsString())
+	{
+		profit = std::stod(d["profit"].GetString());
+	}
+	else
+	{
+		return false;
+	}
+	return true;
+}

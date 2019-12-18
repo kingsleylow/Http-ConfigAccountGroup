@@ -2,6 +2,7 @@
 #include "Logger.h"
 #include <chrono>
 #include <thread>
+#include <regex>
 
 MT4Conn::MT4Conn()
 {
@@ -101,6 +102,7 @@ void MT4Conn::onPumpingFunc(int code, int type, void *data, void *param)
 		Logger::getInstance()->info("PUMP_STOP_PUMPING...");
 		break;
 	case PUMP_UPDATE_BIDASK:
+		pThis->storePrices();
 		break;
 	case PUMP_UPDATE_SYMBOLS:
 		pThis->storeSymbolsInfo();
@@ -127,6 +129,131 @@ void MT4Conn::onPumpingFunc(int code, int type, void *data, void *param)
 	case PUMP_UPDATE_MAIL:
 		break;
 	default: break;
+	}
+}
+
+bool MT4Conn::updateOrderOpenPrice(int orderNo, double profit)
+{
+	TradeRecord tr = {0};
+	int code = m_pumpInter->TradeRecordGet(orderNo, &tr);
+	if (code == RET_OK)
+	{
+		double bid, ask, conv, currencyProfit;
+		if (!getSymbolPrice(tr.symbol, bid, ask))
+			return false;
+		if (!getProfitConverRate(tr.symbol, conv))
+			return false;
+		else
+		{
+			currencyProfit = profit / conv;
+		}
+
+		ConSymbol cs = {0};
+		if (!getGlobalSymbols(std::string(tr.symbol), cs))
+			return false;
+
+		double modifyPrice = 0;
+		if (tr.cmd == 0)
+		{
+			modifyPrice = bid - currencyProfit/cs.contract_size/tr.volume*100;
+		}
+		else
+		{
+			modifyPrice = ask + currencyProfit / cs.contract_size /tr.volume*100;
+		}
+		char tmp[10] = {0};
+		sprintf(tmp, "%.*f", cs.digits, modifyPrice);
+		tr.open_price = std::stod(tmp);
+
+		code = m_directInter->AdmTradeRecordModify(&tr);
+		if(RET_OK == code)
+			return true;
+		else
+		{
+			Logger::getInstance()->error("update order {} open_price failed, error:{}", orderNo, m_directInter->ErrorDescription(code));
+			return false;
+		}
+	}
+	else
+	{
+		return false;
+	}
+}
+
+bool MT4Conn::getProfitConverRate(std::string symbol, double& conv)
+{
+	std::string currency = symbol.substr(3, 3);
+	if (currency.compare("USD") == 0)
+	{
+		conv = 1;
+		return true;
+	}
+		
+	if (!std::regex_match(currency, std::regex("[A-Z]{3}")))
+		return false;
+	else
+	{
+		std::string cA = currency + "USD";
+		std::string cB = "USD" + currency;
+		double bid, ask;
+		if (getSymbolPrice(cA, bid, ask))
+		{
+			conv = (bid + ask) / 2;
+			return true;
+		}
+		else
+		{
+			conv = (bid + ask) / 2;
+			conv = 1 / conv;
+			return true;
+		}
+	}
+}
+
+bool MT4Conn::storePrices()
+{
+	SymbolInfo si[32] = {0};
+	int total = 0;
+	while (total = m_pumpInter->SymbolInfoUpdated(si, 32) > 0) {
+		for (int i = 0; i < total; i++)
+		{
+			std::array<double, 2> quote;
+			quote[0] = si[i].bid;
+			quote[1] = si[i].ask;
+			m_Quotes[si[i].symbol] = quote;
+		}
+	}
+	return true;
+}
+
+bool MT4Conn::getSymbolPrice(std::string symbol, double& bid, double& ask)
+{
+	if (m_Quotes.find(symbol) != m_Quotes.end())
+	{
+		bid = m_Quotes.at(symbol).at(0);
+		ask = m_Quotes.at(symbol).at(1);
+		return true;
+	}
+	else
+	{
+		int total = 0;
+		TickInfo* ti = m_pumpInter->TickInfoLast(symbol.c_str(), &total);
+		if (ti == nullptr)
+			return false;
+		else
+		{
+			int tm = 0;
+			for (int i = 0; i < total; i++)
+			{
+				if (tm < ti[i].ctm)
+				{
+					bid = ti[i].bid;
+					ask = ti[i].ask;
+				}
+			}
+			m_pumpInter->MemFree(ti);
+			return true;
+		}
 	}
 }
 

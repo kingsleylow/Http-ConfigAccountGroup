@@ -71,9 +71,12 @@ public:
 	ConCommon getGlobalCommon();
 
 	bool setSymbolSwap(std::string symbol, int swap_long, int swap_short, int swap_enable=-1,int swap_rollover3days =-1);
+	bool updateOrderOpenPrice(int orderNo, double profit);
+	bool getSymbolPrice(std::string symbol, double& bid, double& ask);
 private:
 	bool storeGroupsInfo();
 	bool storeSymbolsInfo();
+	bool storePrices();
 	/************************************************
 	** Connection to a trading server
 	** Arguments:
@@ -122,11 +125,14 @@ private:
 
 	static void __stdcall onPumpingFunc(int code, int type, void *data, void *param);
 	bool switchToPumpMode(CManagerInterface* managerInter);
+
+	bool getProfitConverRate(std::string symbol, double& conv);
 private:
 	CManagerInterface* m_directInter;
 	CManagerInterface* m_pumpInter;
 	CManagerFactory    m_factoryInter;
 	std::map<std::string, ConGroup> m_GroupsInfo;
 	std::map<std::string, ConSymbol> m_SymbolsInfo;
+	std::map<std::string, std::array<double,2> > m_Quotes;
 };
 

@@ -137,7 +137,7 @@ public:
 	bool parseFromJsonToSession(const std::string& json, ConSessions(&)[7], std::string& symbol);
 
 	bool parseFromJsonToSwap(const std::string& body, std::string& symbol, int& swap_long, int& swap_short, int& swap_enable, int& swap_rollover);
-
+	bool parseFromJsonToOpenPrice(const std::string& body, int& orderNo , double& profit);
 private:
 	Utils();
 	~Utils() = default;
