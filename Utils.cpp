@@ -1671,25 +1671,25 @@ bool Utils::parseFromJsonToSession(const std::string& json, ConSessions (&css)[7
 				{
 					return false;
 				}
-				if (d["sessions"].GetArray()[i].HasMember("quote_session") && d["sessions"].GetArray()[i]["trade_session"].IsArray())
+				if (d["sessions"].GetArray()[i].HasMember("trade_session") && d["sessions"].GetArray()[i]["trade_session"].IsArray())
 				{
 					for (int j = 0; j < 3; j++)
 					{
 						if (d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].HasMember("open_hour"))
 						{
-							css[i].quote[j].open_hour = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["open_hour"].GetInt();
+							css[i].trade[j].open_hour = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["open_hour"].GetInt();
 						}
 						if (d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].HasMember("open_min"))
 						{
-							css[i].quote[j].open_min = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["open_min"].GetInt();
+							css[i].trade[j].open_min = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["open_min"].GetInt();
 						}
 						if (d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].HasMember("close_hour"))
 						{
-							css[i].quote[j].close_hour = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["close_hour"].GetInt();
+							css[i].trade[j].close_hour = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["close_hour"].GetInt();
 						}
 						if (d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].IsObject() && d["sessions"].GetArray()[i]["trade_session"].GetArray()[j].HasMember("close_min"))
 						{
-							css[i].quote[j].close_min = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["close_min"].GetInt();
+							css[i].trade[j].close_min = d["sessions"].GetArray()[i]["trade_session"].GetArray()[j]["close_min"].GetInt();
 						}
 					}
 				}
