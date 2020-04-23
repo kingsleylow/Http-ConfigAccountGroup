@@ -9,6 +9,7 @@ Config::Config()
 	m_confKey["mt4-conn"] = Conf::MT4_CONN_CONF;
 	m_confKey["httpserver-conn"] = Conf::HTTP_CONN_CONF;
 	m_confKey["email"] = Conf::EMAIL_CONF;
+	m_confKey["redis-conn"] = Conf::REDIS_CONF;
 }
 
 bool Config::readConf(const std::string& conf)
@@ -99,6 +100,9 @@ void Config::readAppNode(xml_node<> * node)
 			break;
 		case Conf::EMAIL_CONF:
 			m_emailConf[n->name()] = n->value();
+			break;
+		case Conf::REDIS_CONF:
+			m_redisConf[n->name()] = n->value();
 			break;
 		default:
 			break;

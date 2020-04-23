@@ -853,12 +853,7 @@ bool Utils::parseFromCommmonSecuritesToJson(const ConSymbolGroup securites[], co
 {
 	rapidjson::StringBuffer strBuf;
 	rapidjson::PrettyWriter<rapidjson::StringBuffer> w(strBuf);
-	w.StartObject();
 
-	w.Key("total");
-	w.Int(size);
-
-	w.Key("securities");
 	w.StartArray();
 	for (int i = 0; i < size; i++)
 	{
@@ -873,8 +868,6 @@ bool Utils::parseFromCommmonSecuritesToJson(const ConSymbolGroup securites[], co
 		w.EndObject();
 	}
 	w.EndArray();
-
-	w.EndObject();
 
 	json = strBuf.GetString();
 
@@ -907,8 +900,23 @@ bool Utils::parseFromCommonGroupsToJson(const std::vector<std::string>& groups, 
 	return true;
 }
 
+bool Utils::addInt64(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, long& value)
+{
+	if (key.empty())
+		return false;
+	if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsInt64())
+	{
+		value = obj[key.c_str()].GetInt64();
+		return true;
+	}
+	else
+		return false;
+}
+
 bool Utils::addInt(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, int& value)
 {
+	if (key.empty())
+		return false;
 	if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsInt())
 	{
 		value = obj[key.c_str()].GetInt();
@@ -919,14 +927,16 @@ bool Utils::addInt(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::Mem
 }
 bool Utils::addDouble(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, double& value)
 {
+	if (key.empty())
+		return false;
 	if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsDouble())
 	{
 		value = obj[key.c_str()].GetDouble();
 		return true;
 	}
-	else if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsInt())
+	else if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsInt64())
 	{
-		value = obj[key.c_str()].GetInt();
+		value = obj[key.c_str()].GetInt64();
 		return true;
 	}
 	else
@@ -934,6 +944,8 @@ bool Utils::addDouble(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::
 }
 bool Utils::addString(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, std::string& value)
 {
+	if (key.empty())
+		return false;
 	if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsString())
 	{
 		value = obj[key.c_str()].GetString();
@@ -941,6 +953,22 @@ bool Utils::addString(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::
 	}
 	else
 		return false;
+}
+
+bool Utils::addString(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, char* value, int len)
+{
+	if (key.empty() || value == nullptr)
+		return false;
+	if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsString())
+	{
+		if (obj[key.c_str()].GetStringLength() > len)
+			return false;
+		memcpy(value, obj[key.c_str()].GetString(), obj[key.c_str()].GetStringLength());
+	}
+	else
+		return false;
+
+	return true;
 }
 
 bool Utils::addIntArray(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, int* value)
@@ -956,6 +984,114 @@ bool Utils::addIntArray(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson
 	}
 	else
 		return false;
+}
+
+bool Utils::addDoubleArray(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, double* value)
+{
+	assert(value);
+	if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsArray())
+	{
+		int size = obj[key.c_str()].Size();
+		auto a = obj[key.c_str()].GetArray();
+		for (int i = 0; i < size; i++)
+			value[i] = a[i].GetDouble();
+		return true;
+	}
+	else
+		return false;
+}
+
+
+bool Utils::addConSession(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, ConSessions* session, int size)
+{
+	if (session == nullptr)
+		return false;
+	if (obj.HasMember(key.c_str()) && obj[key.c_str()].IsArray())
+	{
+		auto arr = obj[key.c_str()].GetArray();
+		for (int i = 0; i < size; i++)
+		{
+			if (arr[i].HasMember("quote") && arr[i].IsArray())
+			{
+				auto quoteArr = arr[i].GetArray();
+				for (int j = 0; j < 3; j++)
+				{
+					if (quoteArr[j].HasMember("open_hour") && quoteArr[j].IsInt())
+						session[i].quote[j].open_hour = quoteArr[j].GetInt();
+					else
+						return false;
+
+					if (quoteArr[j].HasMember("open_min") && quoteArr[j].IsInt())
+						session[i].quote[j].open_min = quoteArr[j].GetInt();
+					else
+						return false;
+
+					if (quoteArr[j].HasMember("close_hour") && quoteArr[j].IsInt())
+						session[i].quote[j].close_hour = quoteArr[j].GetInt();
+					else
+						return false;
+
+					if (quoteArr[j].HasMember("close_min") && quoteArr[j].IsInt())
+						session[i].quote[j].close_min = quoteArr[j].GetInt();
+					else
+						return false;
+				}
+			}
+			else
+				return false;
+		}
+	}
+	else
+		return false;
+
+	return true;
+}
+
+bool Utils::addRateInfoArray(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &arr, std::string key, RateInfo*& rates, int size)
+{
+	rates = new RateInfo[size];
+	memset(rates, 0, sizeof(RateInfo)*size);
+	if (!arr.IsArray() || arr.Size() != size)
+		return false;
+	for (int i = 0; i < size; i++)
+	{
+		auto& obj = arr[i];
+		if (addInt(obj, "ctm", (int&)rates[i].ctm) &&
+			addInt(obj, "open", rates[i].open) &&
+			addInt(obj, "high", rates[i].high) &&
+			addInt(obj, "low", rates[i].low) &&
+			addInt(obj, "close", rates[i].close) &&
+			addDouble(obj, "volume", rates[i].vol))
+			return true;
+		else
+			return false;
+	}
+	return true;
+}
+
+bool Utils::intToJson(rapidjson::Writer<rapidjson::StringBuffer>& w, std::string key, int value)
+{
+	w.Key(key.c_str());
+	w.Int(value);
+	return true;
+}
+bool Utils::doubleToJson(rapidjson::Writer<rapidjson::StringBuffer>& w, std::string key, double value)
+{
+	w.Key(key.c_str());
+	w.Double(value);
+	return true;
+}
+bool Utils::stringToJson(rapidjson::Writer<rapidjson::StringBuffer>& w, std::string key, std::string value)
+{
+	w.Key(key.c_str());
+	w.String(value.c_str());
+	return true;
+}
+bool Utils::charArrToJson(rapidjson::Writer<rapidjson::StringBuffer>& w, std::string key, char* value)
+{
+	w.Key(key.c_str());
+	w.String(value);
+	return true;
 }
 
 bool Utils::parseFromJsonToAccuntConfiguration(const std::string& json, AccountConfiguration& configuration, std::string& login)
@@ -1211,17 +1347,12 @@ bool Utils::parseFromSymbolsListToJson(const std::vector<ConSymbol>& symbols, st
 	StringBuffer sb;
 	Writer<StringBuffer> w(sb);
 
-	w.StartObject();
-	w.Key("size");
-	w.Int(symbols.size());
-	w.Key("symbols-list");
 	w.StartArray();
 	for (auto& s : symbols)
 	{
 		w.String(s.symbol);
 	}
 	w.EndArray();
-	w.EndObject();
 
 	json = sb.GetString();
 	return true;
@@ -1590,9 +1721,6 @@ bool Utils::parseFromHolidayToJson(const ConHoliday ch[], const int size, std::s
 	using namespace rapidjson;
 	StringBuffer sb;
 	Writer<StringBuffer> w(sb);
-
-	w.StartObject();
-	w.Key("Holiday");
 	w.StartArray();
 	for (int i = 0; i < size; i++)
 	{
@@ -1616,7 +1744,6 @@ bool Utils::parseFromHolidayToJson(const ConHoliday ch[], const int size, std::s
 		w.EndObject();
 	}
 	w.EndArray();
-	w.EndObject();
 	json = sb.GetString();
 	return true;
 }
@@ -1715,51 +1842,14 @@ bool Utils::parseFromJsonToSwap(const std::string& body, std::string& symbol, in
 	Document d;
 	if (d.Parse(body.c_str()).HasParseError())
 		return false;
-	if (d.HasMember("symbol") && d["symbol"].IsString())
-	{
-		symbol = d["symbol"].GetString();
-	}
+	if (addString(d, "symbol", symbol) &&
+		addInt(d, "swap_long", swap_long) &&
+		addInt(d, "swap_short", swap_short) &&
+		addInt(d, "swap_enable", swap_enable) &&
+		addInt(d, "swap_rollover3days", swap_rollover))
+		return true;
 	else
-	{
 		return false;
-	}
-
-	if (d.HasMember("swap_long") && d["swap_long"].IsInt())
-	{
-		swap_long = d["swap_long"].GetInt();
-	}
-	else
-	{
-		return false;
-	}
-
-	if (d.HasMember("swap_short") && d["swap_short"].IsInt())
-	{
-		swap_short = d["swap_short"].GetInt();
-	}
-	else
-	{
-		return false;
-	}
-
-	if (d.HasMember("swap_enable") && d["swap_enable"].IsInt())
-	{
-		swap_enable = d["swap_enable"].GetInt();
-	}
-	else
-	{
-		return false;
-	}
-
-	if (d.HasMember("swap_rollover3days") && d["swap_rollover3days"].IsInt())
-	{
-		swap_rollover = d["swap_rollover3days"].GetInt();
-	}
-	else
-	{
-		return false;
-	}
-	return true;
 }
 
 bool Utils::parseFromJsonToOpenPrice(const std::string& body, int& orderNo, double& profit)
@@ -1786,4 +1876,685 @@ bool Utils::parseFromJsonToOpenPrice(const std::string& body, int& orderNo, doub
 		return false;
 	}
 	return true;
+}
+
+std::string Utils::serializeConSymbolToJson(int code, int type, const ConSymbol& cs)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+	w.StartObject();
+
+	w.Key("symbol");
+	w.String(cs.symbol);
+
+	w.Key("description");
+	w.String(cs.description);
+
+	w.Key("source");
+	w.String(cs.source);
+
+	w.Key("currency");
+	w.String(cs.currency);
+
+	w.Key("type");
+	w.Int(cs.type);
+
+	w.Key("digits");
+	w.Int(cs.digits);
+
+	w.Key("trade");
+	w.Int(cs.trade);
+
+	w.Key("background_color");
+	w.Int(cs.background_color);
+
+	w.Key("count"); //position
+	w.Int(cs.count);
+
+	w.Key("count_original");
+	w.Int(cs.count_original);
+
+	w.Key("realtime");
+	w.Int(cs.realtime);
+
+	w.Key("starting");
+	w.Int(cs.starting);
+
+	w.Key("expiration");
+	w.Int(cs.expiration);
+
+	w.Key("sessions");
+	w.StartArray();
+	for (int i = 0; i < 7; i++)
+	{
+		w.StartObject();
+		w.Key("quote");
+		w.StartArray();
+		for (int j = 0; j < 3; j++)
+		{
+			w.StartObject();
+			w.Key("open_hour");
+			w.Int(cs.sessions[i].quote[j].open_hour);
+			w.Key("open_min");
+			w.Int(cs.sessions[i].quote[j].open_min);
+			w.Key("close_hour");
+			w.Int(cs.sessions[i].quote[j].close_hour);
+			w.Key("close_min");
+			w.Int(cs.sessions[i].quote[j].close_min);
+			w.EndObject();
+		}
+		w.EndArray();
+
+		w.Key("trade");
+		w.StartArray();
+		for (int j = 0; j < 3; j++)
+		{
+			w.StartObject();
+			w.Key("open_hour");
+			w.Int(cs.sessions[i].trade[j].open_hour);
+			w.Key("open_min");
+			w.Int(cs.sessions[i].trade[j].open_min);
+			w.Key("close_hour");
+			w.Int(cs.sessions[i].trade[j].close_hour);
+			w.Key("close_min");
+			w.Int(cs.sessions[i].trade[j].close_min);
+			w.EndObject();
+		}
+		w.EndArray();
+		w.EndObject();
+	}
+	w.EndArray();
+
+	w.Key("profit_mode");
+	w.Int(cs.profit_mode);
+
+	w.Key("filter");
+	w.Int(cs.filter);
+
+	w.Key("filter_counter");
+	w.Int(cs.filter_counter);
+
+	w.Key("filter_limit");
+	w.Double(cs.filter_limit);
+
+	w.Key("filter_smoothing");
+	w.Int(cs.filter_smoothing);
+
+	w.Key("logging");
+	w.Int(cs.logging);
+
+	w.Key("spread");
+	w.Int(cs.spread);
+
+	w.Key("spread_balance");
+	w.Int(cs.spread_balance);
+
+	w.Key("exemode");
+	w.Int(cs.exemode);
+
+	w.Key("swap_enable");
+	w.Int(cs.swap_enable);
+
+	w.Key("swap_type");
+	w.Int(cs.swap_type);
+
+	w.Key("swap_long");
+	w.Int64(cs.swap_long);
+
+	w.Key("swap_short");
+	w.Int64(cs.swap_short);
+
+	w.Key("swap_rollover3days");
+	w.Int(cs.swap_rollover3days);
+
+	w.Key("contract_size");
+	w.Double(cs.contract_size);
+
+	w.Key("tick_value");
+	w.Double(cs.tick_value);
+
+	w.Key("tick_size");
+	w.Double(cs.tick_size);
+
+	w.Key("stops_level");
+	w.Int(cs.stops_level);
+
+	w.Key("gtc_pendings");
+	w.Int(cs.gtc_pendings);
+
+	w.Key("margin_mode");
+	w.Int(cs.margin_mode);
+
+	w.Key("margin_initial");
+	w.Double(cs.margin_initial);
+
+	w.Key("margin_maintenance");
+	w.Double(cs.margin_maintenance);
+
+	w.Key("margin_hedged");
+	w.Double(cs.margin_hedged);
+
+	w.Key("margin_divider");
+	w.Double(cs.margin_divider);
+
+	w.Key("point");
+	w.Double(cs.point);
+
+	w.Key("multiply");
+	w.Double(cs.multiply);
+
+	w.Key("bid_tickvalue");
+	w.Double(cs.bid_tickvalue);
+
+	w.Key("ask_tickvalue");
+	w.Double(cs.ask_tickvalue);
+
+	w.Key("long_only");
+	w.Int(cs.long_only);
+
+	w.Key("instant_max_volume");
+	w.Int(cs.instant_max_volume);
+
+	w.Key("margin_currency");
+	w.String(cs.margin_currency);
+
+	w.Key("freeze_level");
+	w.Int(cs.freeze_level);
+
+	w.Key("margin_hedged_strong");
+	w.Int(cs.margin_hedged_strong);
+
+	w.Key("value_date");
+	w.Int(cs.value_date);
+
+	w.Key("quote_delay");
+	w.Int(cs.quotes_delay);
+
+	w.Key("swap_openprice");
+	w.Int(cs.swap_openprice);
+
+	w.Key("swap_variation_margin");
+	w.Int(cs.swap_variation_margin);
+
+	w.EndObject();
+
+	return sb.GetString();
+}
+
+bool Utils::unSerializeConSymbolToJson(const std::string& body, ConSymbol& cs)
+{
+	using namespace rapidjson;
+	Document d;
+	if (d.Parse(body.c_str()).HasParseError())
+		return false;
+
+	if (addString(d, "symbol", cs.symbol, 12) &&
+		addString(d, "description", cs.description, 64) &&
+		addString(d, "source", cs.source, 12) &&
+		addString(d, "currency", cs.currency, 12) &&
+		addInt(d, "type", cs.type) &&
+		addInt(d, "digits", cs.digits) &&
+		addInt(d, "trade", cs.trade) &&
+		addInt(d, "background_color", (int&)cs.background_color) &&
+		addInt(d, "count", cs.count) &&
+		addInt(d, "count_original", cs.count_original) &&
+		addInt(d, "realtime", cs.realtime) &&
+		addInt(d, "starting", (int&)cs.starting) &&
+		addInt(d, "expiration", (int&)cs.expiration) &&
+		addInt(d, "profit_mode", cs.profit_mode) &&
+		addInt(d, "filter", cs.filter) &&
+		addInt(d, "filter_counter", cs.filter_counter) &&
+		addDouble(d, "filter_limit", cs.filter_limit) &&
+		addInt(d, "filter_smoothing", cs.filter_smoothing) &&
+		addInt(d, "logging", cs.logging) &&
+		addInt(d, "spread", cs.spread) &&
+		addInt(d, "spread_balance", cs.spread_balance) &&
+		addInt(d, "exemode", cs.exemode) &&
+		addInt(d, "swap_enable", cs.swap_enable) &&
+		addInt(d, "swap_type", cs.swap_type) &&
+		addDouble(d, "swap_long", cs.swap_long) &&
+		addDouble(d, "swap_short", cs.swap_short) &&
+		addInt(d, "swap_rollover3days", cs.swap_rollover3days) &&
+		addDouble(d, "contract_size", cs.contract_size) &&
+		addDouble(d, "tick_value", cs.tick_size) &&
+		addDouble(d, "tick_size", cs.tick_size) &&
+		addInt(d, "stop_level", cs.stops_level) &&
+		addInt(d, "gtc_pending", cs.gtc_pendings) &&
+		addInt(d, "margin_mode", cs.margin_mode) &&
+		addDouble(d, "margin_initial", cs.margin_initial) &&
+		addDouble(d, "margin_maintenance", cs.margin_maintenance) &&
+		addDouble(d, "margin_hedged", cs.margin_hedged) &&
+		addDouble(d, "margin_divider", cs.margin_divider) &&
+		addDouble(d, "point", cs.point) &&
+		addDouble(d, "multiply", cs.multiply) &&
+		addDouble(d, "bid_tickvalue", cs.bid_tickvalue) &&
+		addDouble(d, "ask_tickvalue", cs.ask_tickvalue) &&
+		addInt(d, "long_only", cs.long_only) &&
+		addInt(d, "instant_max_volume", cs.instant_max_volume) &&
+		addString(d, "margin_currency", cs.margin_currency, 12) &&
+		addInt(d, "freeze_level", cs.freeze_level) &&
+		addInt(d, "margin_hedged_strong", cs.margin_hedged_strong) &&
+		addInt(d, "swap_openprice", cs.swap_openprice) &&
+		addInt(d, "swap_variation_margin", cs.swap_variation_margin) &&
+		addConSession(d, "sessions", cs.sessions, 7)
+		)
+		return true;
+	else
+		return false;
+}
+
+bool Utils::unSerializeTradeTransInfo(const std::string& body, TradeTransInfo& tti)
+{
+	using namespace rapidjson;
+	Document d;
+	if (d.Parse(body.c_str()).HasParseError())
+		return false;
+
+	if (addInt(d, "type", (int&)tti.type) &&
+		addInt(d, "flags", (int&)tti.flags) &&
+		addInt(d, "cmd", (int&)tti.cmd) &&
+		addInt(d, "order", tti.order) &&
+		addInt(d, "orderby", tti.orderby) &&
+		addString(d, "symbol", tti.symbol, 12) &&
+		addInt(d, "volume", tti.volume) &&
+		addDouble(d, "price", tti.price) &&
+		addDouble(d, "sl", tti.sl) &&
+		addDouble(d, "tp", tti.tp) &&
+		addInt(d, "ie_deviation", tti.ie_deviation) &&
+		addString(d, "comment", tti.comment, 32) &&
+		addInt(d, "expiration", (int&)tti.expiration)/* &&
+		addInt(d, "crc", tti.crc)*/)
+		return true;
+	else
+		return false;
+}
+
+bool Utils::unSerializeTradeRecord(const std::string& body, TradeRecord& tri)
+{
+	using namespace rapidjson;
+	Document d;
+	if (d.Parse(body.c_str()).HasParseError())
+		return false;
+
+	if (addInt(d, "order", tri.order) &&
+		addInt(d, "login", tri.login) &&
+		addString(d, "symbol", tri.symbol, 12) &&
+		addInt(d, "digits", tri.digits) &&
+		addInt(d, "cmd", tri.cmd) &&
+		addInt(d, "volume", tri.volume) &&
+		addInt(d, "gw_volume", tri.gw_volume) &&
+		addInt(d, "gw_order", tri.gw_order) &&
+		addInt(d, "gw_open_price", (int&)tri.gw_open_price) &&
+		addInt(d, "gw_close_price", (int&)tri.gw_close_price) &&
+		addInt(d, "open_time", (int&)tri.open_time) &&
+		addInt(d, "close_time", (int&)tri.close_time) &&
+		addInt(d, "state", tri.state) &&
+		addDouble(d, "open_price", tri.open_price) &&
+		addDouble(d, "sl", tri.sl) &&
+		addDouble(d, "tp", tri.tp) &&
+		addInt(d, "expiration", (int&)tri.expiration) &&
+		addInt(d, "reason", (int&)tri.reason) &&
+		addDoubleArray(d, "conv_rates", tri.conv_rates) &&
+		addDouble(d, "commission", tri.commission) &&
+		addDouble(d, "commission_agent", tri.commission_agent) &&
+		addDouble(d, "storage", tri.storage) &&
+		addDouble(d, "close_price", tri.close_price) &&
+		addDouble(d, "profit", tri.profit) &&
+		addDouble(d, "taxes", tri.taxes) &&
+		addInt(d, "magic", tri.magic) &&
+		addString(d, "comment", tri.comment, 32) &&
+		addInt(d, "activation", tri.activation) &&
+		addDouble(d, "margin_rate", tri.margin_rate) &&
+		addInt(d, "timestamp", (int&)tri.timestamp))
+		return true;
+	else
+		return false;
+}
+
+bool Utils::unSerializeChartInfo(const std::string& body, ChartInfo& ci)
+{
+	using namespace rapidjson;
+	Document d;
+	if (d.Parse(body.c_str()).HasParseError())
+		return false;
+
+	if (addInt(d, "period", ci.period) &&
+		addInt(d, "start", (int&)ci.start) &&
+		addInt(d, "end", (int&)ci.end) &&
+		addInt(d, "timesign", (int&)ci.timesign) &&
+		addInt(d, "mode", ci.mode) &&
+		addString(d, "symbol", ci.symbol, 12))
+		return true;
+	else
+		return false;
+}
+
+std::string Utils::serializeRateInfo(RateInfo* ri, int size)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+
+	w.StartArray();
+	for (int i = 0; i < size; i++)
+	{
+		w.StartObject();
+		w.Key("ctm");
+		w.Int(ri[i].ctm);
+
+		w.Key("open");
+		w.Int(ri[i].open);
+
+		w.Key("high");
+		w.Int(ri[i].high);
+
+		w.Key("low");
+		w.Int(ri[i].low);
+
+		w.Key("close");
+		w.Int(ri[i].close);
+
+		w.Key("volume");
+		w.Double(ri[i].vol);
+		w.EndObject();
+	}
+	w.EndArray();
+
+	return sb.GetString();
+}
+
+bool Utils::unSerializeChartupdate(const std::string& body, std::string& symbol, int& period, int& size, RateInfo*& rates)
+{
+	using namespace rapidjson;
+	Document d;
+	if (d.Parse(body.c_str()).HasParseError())
+		return false;
+
+	if (!addInt(d, "period", period) ||
+		!addInt(d, "count", size) ||
+		!addString(d, "symbol", symbol))
+		return false;
+	else
+	{
+		if (!d.HasMember("rate") || !d["rate"].IsArray())
+			return false;
+		if (addRateInfoArray(d["rate"], "rate", rates, size))
+			return true;
+		else
+			return false;
+	}
+}
+
+bool Utils::serializeTradeRecord(std::vector<TradeRecord> record, std::string& out)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+	int size = record.size();
+	w.StartObject();
+	for (int i = 0; i < size; i++)
+	{
+		w.Key("order");
+		w.Int(record[i].order);
+		w.Key("login");
+		w.Int(record[i].login);
+		w.Key("symbol");
+		w.String(record[i].symbol);
+		w.Key("digits");
+		w.Int(record[i].digits);
+		w.Key("cmd");
+		w.Int(record[i].cmd);
+		w.Key("volume");
+		w.Int(record[i].volume);
+		w.Key("open_time");
+		w.Int(record[i].open_time);
+		w.Key("close_time");
+		w.Int(record[i].close_time);
+		w.Key("open_price");
+		w.Double(record[i].open_price);
+		w.Key("close_price");
+		w.Double(record[i].close_price);
+		w.Key("sl");
+		w.Double(record[i].sl);
+		w.Key("tp");
+		w.Double(record[i].tp);
+		w.Key("expiration");
+		w.Int(record[i].expiration);
+		w.Key("reason");
+		w.Int(record[i].reason);
+		w.Key("conv_rates");
+		w.StartArray();
+		w.Double(record[i].conv_rates[0]);
+		w.Double(record[i].conv_rates[1]);
+		w.EndArray();
+		w.Key("commission");
+		w.Double(record[i].commission);
+		w.Key("commission_agent");
+		w.Double(record[i].commission_agent);
+		w.Key("storage");
+		w.Double(record[i].storage);
+		w.Key("profit");
+		w.Double(record[i].profit);
+		w.Key("taxes");
+		w.Double(record[i].taxes);
+		w.Key("magic");
+		w.Int(record[i].magic);
+		w.Key("activation");
+		w.Int(record[i].activation);
+		w.Key("gw_order");
+		w.Int(record[i].gw_order);
+		w.Key("gw_volume");
+		w.Int(record[i].gw_volume);
+		w.Key("gw_open_price");
+		w.Int(record[i].gw_open_price);
+		w.Key("gw_close_price");
+		w.Int(record[i].gw_close_price);
+		w.Key("timestamp");
+		w.Int(record[i].timestamp);
+		w.Key("comment");
+		w.String(record[i].comment);
+		w.Key("margin_rate");
+		w.Double(record[i].margin_rate);
+		w.Key("state");
+		w.Int(record[i].state);
+	}
+	w.EndObject();;
+
+	out = sb.GetString();
+	return true;
+}
+
+std::string Utils::serializePumpSymbols(const std::vector<std::string> symbols)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+	w.StartObject();
+	w.Key("type");
+	w.Int(0);
+	w.Key("comment");
+	w.String("symbols");
+	w.Key("content");
+	w.StartArray();
+	for (auto& s : symbols)
+	{
+		w.String(s.c_str());
+	}
+	w.EndArray();
+	w.EndObject();
+	return sb.GetString();
+}
+
+std::string Utils::serializePumpUsers(const std::vector<std::string> users)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+	w.StartObject();
+	w.Key("type");
+	w.Int(1);
+	w.Key("comment");
+	w.String("users");
+	w.Key("content");
+	w.StartArray();
+	for (auto& u : users)
+	{
+		w.String(u.c_str());
+	}
+	w.EndArray();
+	w.EndObject();
+	return sb.GetString();
+}
+
+std::string Utils::serializePumpGroups(const std::vector<std::string> groups)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+	w.StartObject();
+	w.Key("type");
+	w.Int(2);
+	w.Key("comment");
+	w.String("groups");
+	w.Key("content");
+	w.StartArray();
+	for (auto& g : groups)
+	{
+		w.String(g.c_str());
+	}
+	w.EndArray();
+	w.EndObject();
+	return sb.GetString();
+}
+
+std::string Utils::serializeConGroup(const ConGroup& group)
+{
+	//w.RawValue(response.c_str(), response.length(), rapidjson::Type::kObjectType);
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+	w.StartObject();
+	charArrToJson(w, "group", (char*)group.group);
+	intToJson(w, "enable", group.enable);
+	intToJson(w, "timeout", group.timeout);
+	intToJson(w, "otp_mode", group.otp_mode);
+
+	charArrToJson(w, "company", (char*)group.company);
+	charArrToJson(w, "signature", (char*)group.signature);
+	charArrToJson(w, "support_page", (char*)group.support_page);
+	charArrToJson(w, "smtp_server", (char*)(group.smtp_server));
+	charArrToJson(w, "smtp_login", (char*)(group.smtp_login));
+	charArrToJson(w, "smtp_password", (char*)(group.smtp_password));
+	charArrToJson(w, "support_email", (char*)(group.support_email));
+	charArrToJson(w, "templates", (char*)(group.templates));
+	intToJson(w, "copies", group.copies);
+	intToJson(w, "reports", group.reports);
+	intToJson(w, "default_leverage", group.default_leverage);
+	doubleToJson(w, "default_deposit", group.default_deposit);
+	intToJson(w, "maxsecurities", group.maxsecurities);
+	w.Key("ConGroupSec");
+	w.StartArray();
+	for (int i = 0; i < MAX_SEC_GROUPS; i++)
+	{
+		std::string sec = serializeConGroupSec(group.secgroups[i]);
+		w.RawValue(sec.c_str(), sec.length(), rapidjson::Type::kObjectType);
+	}
+	w.EndArray();
+	w.Key("ConGroupMargin");
+	w.StartArray();
+	for (int i = 0; i < MAX_SEC_GROPS_MARGIN; i++)
+	{
+		std::string margin = serializeConGroupMargin(group.secmargins[i]);
+		w.RawValue(margin.c_str(), margin.length(), rapidjson::Type::kObjectType);
+	}
+	w.EndArray();
+	intToJson(w, "secmargins_total", group.secmargins_total);
+	charArrToJson(w, "currency", (char*)(group.currency));
+	doubleToJson(w, "credit", group.credit);
+	intToJson(w, "margin_call", group.margin_call);
+	intToJson(w, "margin_mode", group.margin_mode);
+	intToJson(w, "margin_stopout", group.margin_stopout);
+	doubleToJson(w, "interestrate", group.interestrate);
+	intToJson(w, "use_swap", group.use_swap);
+
+	intToJson(w, "news", group.news);
+	intToJson(w, "rights", group.rights);
+	intToJson(w, "check_ie_prices", group.check_ie_prices);
+	intToJson(w, "maxpositions", group.maxpositions);
+	intToJson(w, "close_reopen", group.close_reopen);
+	intToJson(w, "hedge_prohibited", group.hedge_prohibited);
+	intToJson(w, "close_fifo", group.close_fifo);
+	intToJson(w, "hedge_largeleg", group.hedge_largeleg);
+	//charArrToJson(w, "securities_hash", (char*)group.securities_hash);
+	intToJson(w, "margin_type", group.margin_type);
+	intToJson(w, "archive_period", group.archive_period);
+	intToJson(w, "archive_max_balance", group.archive_max_balance);
+	intToJson(w, "stopout_skip_hedged", group.stopout_skip_hedged);
+	intToJson(w, "archive_pending_period", group.archive_pending_period);
+
+	w.EndObject();
+	return sb.GetString();
+}
+
+std::string Utils::serializeConGroupMargin(const ConGroupMargin& margin)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+	w.StartObject();
+	charArrToJson(w, "symbol", (char*)(margin.symbol));
+	doubleToJson(w, "swap_long", margin.swap_long);
+	doubleToJson(w, "swap_short", margin.swap_short);
+	doubleToJson(w, "margin_divider", margin.margin_divider);
+	w.EndObject();
+	return sb.GetString();
+}
+std::string Utils::serializeConGroupSec(const  ConGroupSec& sec)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+	w.StartObject();
+	intToJson(w, "show", sec.show);
+	intToJson(w, "trade", sec.trade);
+	intToJson(w, "execution", sec.execution);
+	doubleToJson(w, "comm_base", sec.comm_base);
+	intToJson(w, "comm_tye", sec.comm_type);
+	intToJson(w, "comm_lots", sec.comm_lots);
+	doubleToJson(w, "comm_agent", sec.comm_agent);
+	intToJson(w, "comm_agent_type", sec.comm_agent_type);
+
+	intToJson(w, "spread_diff", sec.spread_diff);
+	intToJson(w, "lot_min", sec.lot_min);
+	intToJson(w, "lot_max", sec.lot_max);
+	intToJson(w, "lot_step", sec.lot_step);
+
+	intToJson(w, "ie_deviation", sec.ie_deviation);
+	intToJson(w, "confirmation", sec.confirmation);
+	intToJson(w, "trade_rights", sec.trade_rights);
+	intToJson(w, "ie_quick_mode", sec.ie_quick_mode);
+	intToJson(w, "autocloseout_mode", sec.autocloseout_mode);
+	doubleToJson(w, "comm_tax", sec.comm_tax);
+	intToJson(w, "comm_agent_lots", sec.comm_agent_lots);
+	w.EndObject();
+	return sb.GetString();
+}
+
+std::string Utils::Md5(std::string data)
+{
+	MD5_CTX c;
+	unsigned char md5_hex[MD5_DIGEST_LENGTH] = { 0 };
+	char md5_str[MD5_DIGEST_LENGTH * 2 + 1] = {0};
+	MD5_Init(&c);
+	MD5_Update(&c, data.c_str(), data.size());
+	MD5_Final(md5_hex, &c);
+
+	for (int i = 0; i < MD5_DIGEST_LENGTH; i++)
+	{
+		sprintf(md5_str + i * 2, "%02X", md5_hex[i]);
+	}
+	md5_str[MD5_DIGEST_LENGTH * 2] = '\0';
+
+	return md5_str;
 }

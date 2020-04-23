@@ -191,7 +191,7 @@ bool DirectConn::createConnToMT4()
 	return connectionStatus;
 }
 
-bool DirectConn::TradeTransaction(TradeTransInfo* info, int &code)
+bool DirectConn::tradeTransaction(TradeTransInfo* info, int &code)
 {
 	std::lock_guard<std::mutex> lock(m_mtxDirect);
 	int res = RET_OK;
@@ -354,13 +354,36 @@ bool DirectConn::getUserRecord(int login, UserRecord& ur)
 		return true;
 	}
 }
+
+bool DirectConn::setConSymbolTradeMode(std::string& symbol, int mode)
+{
+	ConSymbol cs = {};
+	if (mode < 0 || mode > 2)
+	{
+		Logger::getInstance()->error("param invalid, symbol :{}, mode: {}",symbol, mode);
+		return false;
+	}
+		
+	if (!getConSymbol(symbol, cs))
+		return false;
+	cs.trade = mode;
+	int ret = m_managerInter->CfgUpdateSymbol(&cs);
+	if (ret != RET_OK)
+	{
+		Logger::getInstance()->error("update trade mode failed. symbol: {}, mode: {}", symbol, mode);
+		return false;
+	}
+	else
+		return true;
+}
+
 TradeRecord* DirectConn::TradesRequest(std::string loginList, int open_only, int& total)
 {
 	std::lock_guard<std::mutex> lock(m_mtxDirect);
 	TradeRecord* tr = m_managerInter->AdmTradesRequest(loginList.c_str(), open_only, &total);
 	return tr;
 }
-void DirectConn::TradesRelease(TradeRecord* tr)
+void DirectConn::tradesRelease(TradeRecord* tr)
 {
 	std::lock_guard<std::mutex> lock(m_mtxDirect);
 	m_managerInter->MemFree(tr);

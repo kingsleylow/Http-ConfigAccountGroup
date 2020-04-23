@@ -19,8 +19,9 @@ public:
 	bool marginLevelRequest(int login, MarginLevel& ml);
 	bool getUserRecord(int login, UserRecord& ur);
 	TradeRecord* TradesRequest(std::string loginList, int open_only, int& total);
-	void TradesRelease(TradeRecord* tr);
-	bool TradeTransaction(TradeTransInfo* info, int &res);
+	void tradesRelease(TradeRecord* tr);
+	bool tradeTransaction(TradeTransInfo* info, int &res);
+	bool setConSymbolTradeMode(std::string& symbol, int mode);
 private:
 	DirectConn();
 	DirectConn(const DirectConn& other) = default;

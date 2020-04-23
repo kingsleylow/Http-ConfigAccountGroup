@@ -3,6 +3,7 @@
 #include <chrono>
 #include <thread>
 #include <regex>
+#include <iostream>
 
 MT4Conn::MT4Conn()
 {
@@ -11,6 +12,9 @@ MT4Conn::MT4Conn()
 
 MT4Conn::~MT4Conn()
 {
+	m_stop = true;
+	m_memCache.stopEventLoop();
+	m_tdExpire.join();
 }
 
 bool MT4Conn::mt4Init()
@@ -34,10 +38,95 @@ bool MT4Conn::mt4Init()
 		SPDLOG(error, "mt4 factory create mananger interface failed.");
 		return false;
 	}
+	watchConntoMT4();
+
+	std::string channel = Config::getInstance().getRedisConf().find("cache-channel")->second;
+	std::string host = Config::getInstance().getRedisConf().find("host")->second;
+	std::string port = Config::getInstance().getRedisConf().find("port")->second;
+	std::string pass = Config::getInstance().getRedisConf().find("pass")->second;
+
+	m_redis.init(channel);
+	m_redis.connectToServer(host, std::stoi(port), pass);
+	m_memCache.init(std::bind(&MT4Conn::pumpEvent, this, std::placeholders::_1, std::placeholders::_2), this);
+	m_memCache.startEventLoop();
+
+	m_tdExpire = std::thread(&MT4Conn::expireCache, this);
 	return true;
 }
 
-bool MT4Conn::mt4Login(const int login, const char* passwd, CManagerInterface* manager)
+int  MT4Conn::pumpEvent(std::string& data, void* param)
+{
+#ifdef  MY_DEBUG
+	std::cout << data << std::endl;
+#endif //  MY_DEBUG
+
+	m_redis.enqueue(data);
+	return 0;
+}
+
+void MT4Conn::forwardEvent(std::vector<std::string> data, int msgtype, int mt4type)
+{
+	std::string out;
+	switch (msgtype)
+	{
+	case 0://symbols
+		out = Utils::getInstance().serializePumpSymbols(data);
+		break;
+	case 1://users
+		out = Utils::getInstance().serializePumpUsers(data);
+		break;
+	case 2://groups
+		out = Utils::getInstance().serializePumpGroups(data);
+		break;
+	}
+
+	if (TRANS_ADD == mt4type)
+	{
+		std::string md5 = Utils::getInstance().Md5(out);
+		if (m_pumpCache.find(md5) == m_pumpCache.end())
+		{
+			std::lock_guard<std::mutex> lock(m_pumpCacheMtx);
+			time_t now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+			m_pumpCache[md5] = now;
+			m_memCache.add(out);
+		}
+	}
+	else
+	{
+		m_memCache.add(out);
+	}
+	
+}
+
+void MT4Conn::expireCache()
+{
+	while (true)
+	{
+		if (m_stop)
+			break;
+		if (!m_pumpCache.empty())
+		{
+			time_t now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+			std::vector<std::string> expireKey;
+			for (auto& c : m_pumpCache)
+			{
+				if (c.second - now >= 5)
+				{
+					expireKey.push_back(c.first);
+				}
+			}
+
+			for (auto& e : expireKey)
+			{
+				std::lock_guard<std::mutex> lock(m_pumpCacheMtx);
+				m_pumpCache.erase(e);
+			}
+		}
+		std::this_thread::sleep_for(std::chrono::seconds(60));
+	}
+}
+
+bool MT4Conn::mt4Login(const int login, const char* passwd, CManagerInterface*& manager)
 {
 	if (RET_OK != mt4Conn(Config::getInstance().getMT4ConnConf().find(std::move("host"))->second.c_str(), manager))
 		return false;
@@ -65,7 +154,7 @@ bool MT4Conn::mt4Login(const int login, const char* passwd, CManagerInterface* m
 	return true;
 }
 
-int MT4Conn::mt4Conn(const char* host, CManagerInterface* manager)
+int MT4Conn::mt4Conn(const char* host, CManagerInterface*& manager)
 {
 	int cnt = 0;
 	while (cnt < 3)
@@ -105,12 +194,13 @@ void MT4Conn::onPumpingFunc(int code, int type, void *data, void *param)
 		pThis->storePrices();
 		break;
 	case PUMP_UPDATE_SYMBOLS:
-		pThis->storeSymbolsInfo();
+		pThis->storeSymbolsInfo(data, type);
 		break;
 	case PUMP_UPDATE_GROUPS:
-		pThis->storeGroupsInfo();
+		pThis->storeGroupsInfo(data, type);
 		break;
 	case PUMP_UPDATE_USERS:
+		pThis->storeUserInfo(data, type);
 		break;
 	case PUMP_UPDATE_ONLINE:
 		break;
@@ -132,7 +222,7 @@ void MT4Conn::onPumpingFunc(int code, int type, void *data, void *param)
 	}
 }
 
-bool MT4Conn::updateOrderOpenPrice(int orderNo, double profit)
+int MT4Conn::updateOrderOpenPrice(int orderNo, double profit, std::string& err)
 {
 	TradeRecord tr = {0};
 	int code = m_pumpInter->TradeRecordGet(orderNo, &tr);
@@ -140,17 +230,18 @@ bool MT4Conn::updateOrderOpenPrice(int orderNo, double profit)
 	{
 		double bid, ask, conv, currencyProfit;
 		if (!getSymbolPrice(tr.symbol, bid, ask))
-			return false;
+			return -1;
 		if (!getProfitConverRate(tr.symbol, conv))
-			return false;
+			return -1;
 		else
 		{
 			currencyProfit = profit / conv;
 		}
 
 		ConSymbol cs = {0};
-		if (!getGlobalSymbols(std::string(tr.symbol), cs))
-			return false;
+		std::string err;
+		if (0 != getGlobalSymbols(std::string(tr.symbol), cs, err))
+			return -1;
 
 		double modifyPrice = 0;
 		if (tr.cmd == 0)
@@ -162,21 +253,23 @@ bool MT4Conn::updateOrderOpenPrice(int orderNo, double profit)
 			modifyPrice = ask + currencyProfit / cs.contract_size /tr.volume*100;
 		}
 		char tmp[10] = {0};
-		sprintf(tmp, "%.*f", cs.digits, modifyPrice);
+		sprintf_s(tmp, "%.*f", cs.digits, modifyPrice);
 		tr.open_price = std::stod(tmp);
 
 		code = m_directInter->AdmTradeRecordModify(&tr);
 		if(RET_OK == code)
-			return true;
+			return code;
 		else
 		{
-			Logger::getInstance()->error("update order {} open_price failed, error:{}", orderNo, m_directInter->ErrorDescription(code));
-			return false;
+			err = m_directInter->ErrorDescription(code);
+			Logger::getInstance()->error("update order {} open_price failed, error:{}", orderNo, err);
+			return code;
 		}
 	}
 	else
 	{
-		return false;
+		err = m_pumpInter->ErrorDescription(code);
+		return code;
 	}
 }
 
@@ -257,41 +350,96 @@ bool MT4Conn::getSymbolPrice(std::string symbol, double& bid, double& ask)
 	}
 }
 
-bool MT4Conn::storeGroupsInfo()
+bool MT4Conn::storeGroupsInfo(void* data, int type)
 {
-	int total = 0;
 	bool res = true;
-	ConGroup* groupInfo = m_pumpInter->GroupsGet(&total);
-	if (total)
+	if (data == nullptr)
 	{
-		for (int i = 0; i < total; i++)
+		std::vector<std::string> groupsV;
+		int total = 0;
+		ConGroup* groupInfo = m_pumpInter->GroupsGet(&total);
+		if (total)
 		{
-			m_GroupsInfo[groupInfo[i].group] = groupInfo[i];
+			for (int i = 0; i < total; i++)
+			{
+				m_GroupsInfo[groupInfo[i].group] = groupInfo[i];
+				groupsV.push_back(groupInfo[i].group);
+				std::string md5 = Utils::getInstance().Md5(Utils::getInstance().serializeConGroup(groupInfo[i]));
+				m_groupCache[groupInfo[i].group] = md5;
+			}
 		}
+		else
+		{
+			res = false;
+		}
+		m_pumpInter->MemFree(groupInfo);
+
+		if(type == TRANS_ADD || type == TRANS_UPDATE)
+			forwardEvent(groupsV, 2, type);
 	}
 	else
 	{
-		res = false;
+		ConGroup* cg = (ConGroup*)data;
+		std::string md5 = Utils::getInstance().Md5(Utils::getInstance().serializeConGroup(*cg));
+		if (m_GroupsInfo.find(cg->group) != m_GroupsInfo.end() &&
+			m_groupCache.find(cg->group) != m_groupCache.end() &&
+			m_groupCache.at(cg->group) == md5)
+			return res;
+
+		m_GroupsInfo[cg->group] = *cg;
+		m_groupCache[cg->group] = md5;
+		if (type == TRANS_ADD || type == TRANS_UPDATE)
+			forwardEvent(std::vector<std::string>{cg->group}, 2, type);
 	}
-	m_pumpInter->MemFree(groupInfo);
 	return res;
 }
 
-bool MT4Conn::storeSymbolsInfo()
+bool MT4Conn::storeSymbolsInfo(void* data, int type)
 {
-	int total = 0;
-	ConSymbol* symbols = m_pumpInter->SymbolsGetAll(&total);
-	if (NULL == symbols)
-		return false;
-	for (int i = 0; i < total; i++)
+	if (data == nullptr)
 	{
-		m_SymbolsInfo[symbols[i].symbol] = symbols[i];
+		std::vector<std::string> symbolsV;
+		int total = 0;
+		ConSymbol* symbols = m_pumpInter->SymbolsGetAll(&total);
+		if (NULL == symbols)
+			return false;
+		for (int i = 0; i < total; i++)
+		{
+			m_SymbolsInfo[symbols[i].symbol] = symbols[i];
+			symbolsV.push_back(symbols[i].symbol);
+		}
+		m_pumpInter->MemFree(symbols);
+
+		if (type == TRANS_ADD || type == TRANS_UPDATE)
+			forwardEvent(symbolsV, 0, type);
 	}
-	m_pumpInter->MemFree(symbols);
+	else
+	{
+		ConSymbol* cs = (ConSymbol*)data;
+		m_SymbolsInfo[cs->symbol] = *cs;
+		
+		if (type == TRANS_ADD || type == TRANS_UPDATE)
+			forwardEvent(std::vector<std::string>{cs->symbol}, 0, type);
+	}
 	return true;
 }
 
-bool MT4Conn::switchToPumpMode(CManagerInterface* managerInter)
+bool MT4Conn::storeUserInfo(void* data, int type)
+{
+	if (data == nullptr)
+		return false;
+	else
+	{
+		UserRecord* ur = (UserRecord*)data;
+		std::string out;
+
+		if (type == TRANS_ADD || type == TRANS_UPDATE)
+			forwardEvent(std::vector<std::string>{std::to_string(ur->login)}, 1, type);
+	}
+	return true;
+}
+
+bool MT4Conn::switchToPumpMode(CManagerInterface*& managerInter)
 {
 	if (RET_OK != managerInter->PumpingSwitchEx(&MT4Conn::onPumpingFunc, 0, this))
 	{
@@ -305,7 +453,7 @@ bool MT4Conn::switchToPumpMode(CManagerInterface* managerInter)
 bool MT4Conn::mt4DirtIsConnected()
 {
 	try {
-		if (m_directInter->Ping() == RET_OK)
+		if (nullptr != m_directInter && m_directInter->Ping() == RET_OK)
 			return true;
 		else
 			return false;
@@ -317,29 +465,37 @@ bool MT4Conn::mt4DirtIsConnected()
 	return true;
 }
 
-bool MT4Conn::createDirectConnToMT4(CManagerInterface* manager)
+bool MT4Conn::createDirectConnToMT4(CManagerInterface*& manager)
 {
+	if (nullptr != manager && manager->Ping() == RET_OK)
+	{
+		manager->Disconnect();
+	}
+	manager->Release();
+	manager = nullptr;
+	if (nullptr == (manager = m_factoryInter.Create(ManAPIVersion)))
+		return false;
 	if (mt4Login(std::stoi(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
-		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), m_directInter))
+		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), manager))
 		return true;
 	else
 		return false;
 }
-bool MT4Conn::createPumpConnToMT4(CManagerInterface* manager)
+bool MT4Conn::createPumpConnToMT4(CManagerInterface*& manager)
 {
-	if (m_pumpInter->IsConnected())
+	if (nullptr != manager && manager->IsConnected())
 	{
-		m_pumpInter->Disconnect();
+		manager->Disconnect();
 	}
-	m_pumpInter->Release();
-	m_pumpInter = nullptr;
-	if (nullptr == (m_pumpInter = m_factoryInter.Create(ManAPIVersion)))
+	manager->Release();
+	manager = nullptr;
+	if (nullptr == (manager = m_factoryInter.Create(ManAPIVersion)))
 		return false;
 
 
 	if (mt4Login(std::stoi(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
-		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), m_pumpInter) &&
-		switchToPumpMode(m_pumpInter))
+		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), manager) &&
+		switchToPumpMode(manager))
 		return true;
 	else
 		return false;
@@ -347,8 +503,6 @@ bool MT4Conn::createPumpConnToMT4(CManagerInterface* manager)
 
 bool MT4Conn::createConnToMT4()
 {
-	if (!mt4Init())
-		return false;
 	if (mt4Login(std::stoi(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
 		Config::getInstance().getMT4ConnConf().find(std::move("passwd"))->second.c_str(), m_directInter) &&
 		mt4Login(std::stoi(Config::getInstance().getMT4ConnConf().find(std::move("login"))->second),
@@ -370,11 +524,11 @@ bool MT4Conn::heartBeat()
 
 void MT4Conn::watchConntoMT4()
 {
-	std::thread t([&]()
+	m_monitorConn = std::thread([&]()
 	{
 		while (true)
 		{
-			std::this_thread::sleep_for(std::chrono::seconds(1));
+			std::this_thread::sleep_for(std::chrono::seconds(3));
 
 			if (!mt4DirtIsConnected())
 			{
@@ -382,55 +536,28 @@ void MT4Conn::watchConntoMT4()
 				if (!createConnToMT4())
 				{
 					Logger::getInstance()->info("connect to mt4 failed.");
+					std::cout << "direct connect to mt4 failed" << std::endl;
 				}
 			}
 
-			if (!m_pumpInter->IsConnected())
+			if (nullptr == m_pumpInter || !m_pumpInter->IsConnected())
 			{
 				if (!createPumpConnToMT4(m_pumpInter))
 				{
 					Logger::getInstance()->info("connect to mt4 failed.");
+					std::cout << "pump connect to mt4 failed" << std::endl;
 				}
 			}
 		}
 	});
-	t.detach();
+	m_monitorConn.detach();
 }
 
 ConGroup MT4Conn::getGroupCfg(const std::string& group)
 {
 	ConGroup ret = { 0 };
 	ret = m_GroupsInfo[group];
-	/*int total = 0;
-	ConGroup* cfgGroup = nullptr;
-	ConGroup ret = { 0 };
-	
-	int tryTimes = 0;
-	do
-	{
-		if (mt4DirtIsConnected())
-		{
-			cfgGroup = m_directInter->CfgRequestGroup(&total);
-			if (total)
-			{
-				for (int i = 0; i < total; i++)
-				{
-					if (group.compare(cfgGroup[i].group) == 0)
-						ret = cfgGroup[i];
-				}
-			}
-		}
-		else
-		{
-			if (tryTimes > 5)
-				break;
-			createConnToMT4();
-			tryTimes++;
-			continue;
-		}
-	} while (0);
 
-	m_directInter->MemFree(cfgGroup);*/
 	return ret;
 }
 
@@ -467,7 +594,7 @@ bool MT4Conn::getGroupNames(std::vector<std::string>& groups)
 	return true;
 }
 
-int MT4Conn::getSecuritiesNames(ConSymbolGroup securities[])
+int MT4Conn::getSecuritiesNames(ConSymbolGroup securities[], std::string& err)
 {
 	int res = 0;
 	int tryTimes = 0;
@@ -476,10 +603,12 @@ int MT4Conn::getSecuritiesNames(ConSymbolGroup securities[])
 		if (mt4DirtIsConnected())
 		{
 			res = m_directInter->CfgRequestSymbolGroup(securities);
+			if (RET_OK != res)
+				err = m_directInter->ErrorDescription(res);
 		}
 		else
 		{
-			if (tryTimes > 5)
+			if (tryTimes > 3)
 				break;
 			createConnToMT4();
 			tryTimes++;
@@ -491,7 +620,7 @@ int MT4Conn::getSecuritiesNames(ConSymbolGroup securities[])
 }
 
 
-bool MT4Conn::updateGroupSec(const std::string& group,const std::map<int, ConGroupSec>& cfgGroupSec, std::set<int> index)
+int MT4Conn::updateGroupSec(const std::string& group,const std::map<int, ConGroupSec>& cfgGroupSec, std::set<int> index, std::string& err)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	int size = sizeof(cfgGroup.secgroups) / sizeof(ConGroupSec);
@@ -510,21 +639,20 @@ bool MT4Conn::updateGroupSec(const std::string& group,const std::map<int, ConGro
 	}
 	else
 	{
-		return false;
+		return -1;
 	}	
 
 	int res = 0;
 	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group securities failed.{}, group:{},index:{}",
-			m_directInter->ErrorDescription(res), group, tmpIndex);
-		return false;
+		err = m_directInter->ErrorDescription(res);
+		Logger::getInstance()->error("update group securities failed.{}, group:{},index:{}", err, group, tmpIndex);
 	}
-	return true;
+	return res;
 }
 
 
-bool MT4Conn::updateGroupSymbol(const std::string& group, const std::map<std::string, ConGroupMargin>& cfgGroupMargin)
+int MT4Conn::updateGroupSymbol(const std::string& group, const std::map<std::string, ConGroupMargin>& cfgGroupMargin, std::string& err)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	int oldSize = cfgGroup.secmargins_total;
@@ -549,16 +677,16 @@ bool MT4Conn::updateGroupSymbol(const std::string& group, const std::map<std::st
 	}
 	else
 	{
-		return false;
+		return -1;
 	}
 
 	int res = 0;
 	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group margins failed.{}", m_directInter->ErrorDescription(res));
-		return false;
+		err = m_directInter->ErrorDescription(res);
+		Logger::getInstance()->error("update group margins failed.{}", err);
 	}
-	return true;
+	return res;
 }
 
 
@@ -580,7 +708,7 @@ GroupCommon MT4Conn::getGroupCommon(const std::string& group)
 	return common;
 }
 
-bool MT4Conn::updateGroupCommon(const std::string& group, const GroupCommon& common)
+int MT4Conn::updateGroupCommon(const std::string& group, const GroupCommon& common, std::string& err)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	if (group.compare(cfgGroup.group) == 0)
@@ -597,17 +725,17 @@ bool MT4Conn::updateGroupCommon(const std::string& group, const GroupCommon& com
 	}
 	else
 	{
-		return false;
+		return -1;
 	}
 	
 
 	int res = 0;
 	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group common failed.{}", m_directInter->ErrorDescription(res));
-		return false;
+		err = m_directInter->ErrorDescription(res);
+		Logger::getInstance()->error("update group common failed.{}",err);
 	}
-	return true;
+	return res;
 }
 
 GroupMargin MT4Conn::getGroupMargin(const std::string& group)
@@ -625,7 +753,7 @@ GroupMargin MT4Conn::getGroupMargin(const std::string& group)
 	return margin;
 }
 
-bool MT4Conn::updateGroupMargin(const std::string group, const GroupMargin& margin)
+int MT4Conn::updateGroupMargin(const std::string group, const GroupMargin& margin, std::string& err)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	if (group.compare(cfgGroup.group) == 0)
@@ -640,17 +768,17 @@ bool MT4Conn::updateGroupMargin(const std::string group, const GroupMargin& marg
 	}
 	else
 	{
-		return false;
+		return -1;
 	}
 
 
 	int res = 0;
 	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group margin failed.{}", m_directInter->ErrorDescription(res));
-		return false;
+		err = m_directInter->ErrorDescription(res);
+		Logger::getInstance()->error("update group margin failed.{}", err);
 	}
-	return true;
+	return res;
 }
 
 GroupArchive MT4Conn::getGroupArchive(const std::string& group)
@@ -663,7 +791,7 @@ GroupArchive MT4Conn::getGroupArchive(const std::string& group)
 
 	return archive;
 }
-bool MT4Conn::updateGroupArchive(const std::string group, const GroupArchive& archive)
+int MT4Conn::updateGroupArchive(const std::string group, const GroupArchive& archive, std::string& err)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	if (group.compare(cfgGroup.group) == 0)
@@ -674,17 +802,17 @@ bool MT4Conn::updateGroupArchive(const std::string group, const GroupArchive& ar
 	}
 	else
 	{
-		return false;
+		return -1;
 	}
 
 
 	int res = 0;
 	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group margin failed.{}", m_directInter->ErrorDescription(res));
-		return false;
+		err = m_directInter->ErrorDescription(res);
+		Logger::getInstance()->error("update group margin failed.{}", err);
 	}
-	return true;
+	return res;
 }
 
 GroupReport MT4Conn::getGroupReport(const std::string& group)
@@ -703,7 +831,7 @@ GroupReport MT4Conn::getGroupReport(const std::string& group)
 	return report;
 }
 
-bool MT4Conn::upateGroupReport(const std::string group, const GroupReport& report)
+int MT4Conn::upateGroupReport(const std::string group, const GroupReport& report, std::string& err)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	if (group.compare(cfgGroup.group) == 0)
@@ -719,17 +847,17 @@ bool MT4Conn::upateGroupReport(const std::string group, const GroupReport& repor
 	}
 	else
 	{
-		return false;
+		return -1;
 	}
 
 
 	int res = 0;
 	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group margin failed.{}", m_directInter->ErrorDescription(res));
-		return false;
+		err = m_directInter->ErrorDescription(res);
+		Logger::getInstance()->error("update group margin failed.{}", err);
 	}
-	return true;
+	return res;
 }
 
 GroupPermission MT4Conn::getGroupPermission(const std::string& group)
@@ -754,7 +882,7 @@ GroupPermission MT4Conn::getGroupPermission(const std::string& group)
 	return permission;
 }
 
-bool MT4Conn::updateGroupPerssion(const std::string group, const GroupPermission& permission)
+int MT4Conn::updateGroupPerssion(const std::string group, const GroupPermission& permission, std::string& err)
 {
 	ConGroup cfgGroup(std::move(getGroupCfg(group)));
 	if (group.compare(cfgGroup.group) == 0)
@@ -776,25 +904,24 @@ bool MT4Conn::updateGroupPerssion(const std::string group, const GroupPermission
 	}
 	else
 	{
-		return false;
+		return -1;
 	}
 
 
 	int res = 0;
 	if (RET_OK != (res = m_directInter->CfgUpdateGroup(&cfgGroup)))
 	{
-		Logger::getInstance()->error("update group margin failed.{}", m_directInter->ErrorDescription(res));
-		return false;
+		err = m_directInter->ErrorDescription(res);
+		Logger::getInstance()->error("update group margin failed.{}", err);
 	}
-	return true;
+	return res;
 }
 
-bool MT4Conn::updateAccounts(const std::string login, const AccountConfiguration& configuration)
+int MT4Conn::updateAccounts(const std::string login, const AccountConfiguration& configuration, std::string& err)
 {
 	if (login.empty())
 		return false;
 	int _login = std::stoi(login);
-	bool res = true;
 	UserRecord ur = {0};
 	int ret = m_pumpInter->UserRecordGet(_login, &ur);
 	if (ret == RET_OK)
@@ -803,21 +930,24 @@ bool MT4Conn::updateAccounts(const std::string login, const AccountConfiguration
 		ur.enable_change_password = configuration.enable_change_password;
 		if (RET_OK != (ret = m_directInter->UserRecordUpdate(&ur)))
 		{
-			Logger::getInstance()->info("error :{}", m_directInter->ErrorDescription(ret));
-			res = false;
+			err = m_directInter->ErrorDescription(ret);
+			Logger::getInstance()->info("error :{}", err);
+			return ret;
 		}
 		if (RET_OK != (ret = m_directInter->UserPasswordSet(_login, configuration.password.c_str(), 0, 0)))
 		{
-			Logger::getInstance()->info("error :{}", m_directInter->ErrorDescription(ret));
-			res = false;
+			err = m_directInter->ErrorDescription(ret);
+			Logger::getInstance()->info("error :{}", err);
+			return ret;
 		}
 	}
 	else
 	{
-		Logger::getInstance()->info("error :{}", m_pumpInter->ErrorDescription(ret));
-		res = false;
+		err = m_pumpInter->ErrorDescription(ret);
+		Logger::getInstance()->info("error :{}", err);
+		return ret;
 	}
-	return res;
+	return ret;
 }
 
 ConFeeder* MT4Conn::getGlobalDatafeed(int& total)
@@ -858,25 +988,25 @@ ConAccess* MT4Conn::getGlobalIPList(int& total)
 	return ip;
 }
 
-bool MT4Conn::getGlobalSymbols(std::vector<ConSymbol>& symbols)
+int MT4Conn::getGlobalSymbols(std::vector<ConSymbol>& symbols, std::string& err)
 {
 	if (m_SymbolsInfo.empty())
-		return false;
+		return -1;
 	for (auto& s : m_SymbolsInfo)
 	{
 		symbols.push_back(s.second);
 	}	
-	return true;
+	return 0;
 }
 
-bool  MT4Conn::getGlobalSymbols(std::string& symbol, ConSymbol& con)
+int  MT4Conn::getGlobalSymbols(std::string& symbol, ConSymbol& con, std::string& err)
 {
 	if (m_SymbolsInfo.empty() || m_SymbolsInfo.find(symbol) == m_SymbolsInfo.end())
-		return false;
+		return -1;
 	else
 	{
 		con = m_SymbolsInfo[symbol];
-		return true;
+		return 0;
 	}
 }
 
@@ -949,30 +1079,32 @@ void MT4Conn::releaseHoliday(ConHoliday* ch)
 	}
 }
 
-bool MT4Conn::updateSymbolsSessions(const std::string& symbol, const ConSessions cs[7])
+int MT4Conn::updateSymbolsSessions(const std::string& symbol, const ConSessions cs[7], std::string& err)
 {
 	ConSymbol csConf = {};
 	if (mt4DirtIsConnected())
 	{
-		if (!getGlobalSymbols(const_cast<std::string&>(symbol), csConf))
-			return false;
+		std::string err;
+		if (0 != getGlobalSymbols(const_cast<std::string&>(symbol), csConf, err))
+			return -1;
 
 		memcpy(csConf.sessions, cs, sizeof(ConSessions) * 7);
 
 		int res = RET_OK;
-		if (RET_OK == (res = m_directInter->CfgUpdateSymbol(&csConf)))
+		if (RET_OK != (res = m_directInter->CfgUpdateSymbol(&csConf)))
 		{
-			return true;
+			err = m_directInter->ErrorDescription(res);
+			return res;
 		}
 		else
 		{
-			return false;
+			return res;
 		}
 	}
-	return false;
+	return -1;
 }
 
-bool MT4Conn::setSymbolSwap(std::string symbol, int swap_long, int swap_short, int swap_enable, int swap_rollover3days)
+int MT4Conn::setSymbolSwap(std::string& err, std::string symbol, int swap_long, int swap_short, int swap_enable, int swap_rollover3days)
 {
 	ConSymbol cs = {0};
 	bool found = false;
@@ -987,7 +1119,7 @@ bool MT4Conn::setSymbolSwap(std::string symbol, int swap_long, int swap_short, i
 	}
 	if (!found)
 	{
-		return false;
+		return -1;
 	}
 	else
 	{
@@ -1001,12 +1133,178 @@ bool MT4Conn::setSymbolSwap(std::string symbol, int swap_long, int swap_short, i
 		int code = m_directInter->CfgUpdateSymbol(&cs);
 		if (code != RET_OK)
 		{
-			Logger::getInstance()->error("update swap failed. error {}", m_directInter->ErrorDescription(code));
-			return false;
+			err = m_directInter->ErrorDescription(code);
+			Logger::getInstance()->error("update swap failed. error {}", err);
+			return code;
 		}
 		else
 		{
-			return true;
+			return code;
 		}
 	}
+}
+
+int MT4Conn::setSymbolTradeMode(std::string symbol, int mode, std::string& err)
+{
+	ConSymbol cs = {};
+	if (mode < 0 || mode > 2)
+	{
+		Logger::getInstance()->error("param invalid, symbol :{}, mode: {}", symbol, mode);
+		return -1;
+	}
+
+	if (!getConSymbol(symbol, cs, err))
+		return -1;
+	cs.trade = mode;
+	int ret = m_directInter->CfgUpdateSymbol(&cs);
+	if (ret != RET_OK)
+	{
+		err = m_directInter->ErrorDescription(ret);
+		Logger::getInstance()->error("update trade mode failed. symbol: {}, mode: {}", symbol, mode);
+		return ret;
+	}
+	else
+		return ret;
+}
+
+int MT4Conn::getConSymbol(std::string symbol, ConSymbol& cs, std::string& err)
+{
+	bool found = false;
+	for (auto& c : m_SymbolsInfo)
+	{
+		if (std::string(c.second.symbol).compare(symbol) == 0)
+		{
+			cs = c.second;
+			found = true;
+			break;
+		}
+	}
+	if (!found)
+	{
+		return -1;
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+int MT4Conn::updateConSymbol(const ConSymbol cs)
+{
+	return m_directInter->CfgUpdateSymbol(&cs);
+}
+
+int MT4Conn::tradeTransaction(TradeTransInfo* info, std::string& err)
+{
+	std::lock_guard<std::mutex> lock(m_directMtx);
+	int res = RET_OK;
+	if (RET_OK != (res = m_directInter->TradeTransaction(info)) && RET_OK_NONE != res)
+	{
+		if (RET_OK != (res = m_directInter->TradeTransaction(info)) && RET_OK_NONE != res)
+		{
+			err = m_directInter->ErrorDescription(res);
+			Logger::getInstance()->error("TradeTransaction failed, order #{}, error {}", info->order, err);
+			return res;
+		}
+		else
+		{
+			return 0;
+		}
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+int MT4Conn::updateTradeRecord(TradeRecord* info, std::string& err)
+{
+	std::lock_guard<std::mutex> lock(m_directMtx);
+	int res = RET_OK;
+	if (RET_OK != (res = m_directInter->AdmTradeRecordModify(info)) && RET_OK_NONE != res)
+	{
+		if (RET_OK != (res = m_directInter->AdmTradeRecordModify(info)) && RET_OK_NONE != res)
+		{
+			err = m_directInter->ErrorDescription(res);
+			Logger::getInstance()->error("admTradeRecordModify failed, order #{}, error {}", info->order, err);
+		}
+	}
+	return res;
+}
+
+int MT4Conn::tradesGetBySymbol(const std::string& symbol, std::vector<TradeRecord>& recordV, std::string& err)
+{
+	std::vector<std::string> groups;
+	if (!getGroupNames(groups))
+		return -1;
+	std::lock_guard<std::mutex> lock(m_directMtx);
+	int res = RET_OK;
+	int size = 0;
+	for (auto& g : groups)
+	{
+		TradeRecord* record = m_directInter->AdmTradesRequest(g.c_str(), 0, &size);
+		if (record == nullptr)
+			continue;
+		else
+		{
+			for (int i = 0; i < size; i++)
+			{
+				recordV.push_back(record[i]);
+			}
+			m_directInter->MemFree(record);
+		}
+
+	}
+	return 0;
+}
+
+int MT4Conn::tradesGetByTicket(const std::string tick, std::vector<TradeRecord>& recordV, std::string& err)
+{
+	std::lock_guard<std::mutex> lock(m_directMtx);
+	int res = RET_OK;
+	int size = 0;
+	std::string ticket = "#" + tick;
+	TradeRecord* record = m_directInter->AdmTradesRequest(ticket.c_str(), 0, &size);
+	if (record == nullptr)
+		return -1;
+	else
+	{
+		for (int i = 0; i < size; i++)
+		{
+			recordV.push_back(record[i]);
+		}
+		m_directInter->MemFree(record);
+	}
+
+	return 0;
+}
+
+void MT4Conn::tradesRelease(TradeRecord*& record)
+{
+	m_directInter->MemFree(record);
+}
+
+int MT4Conn::chartInfoReq(const ChartInfo* chart, RateInfo*& ri, int& size, std::string& err)
+{
+	std::lock_guard<std::mutex> lock(m_directMtx);
+	__time32_t timesign = 0;
+	ri = m_directInter->ChartRequest(chart, &timesign, &size);
+	if (ri != nullptr)
+		return 0;
+	else
+		return -1;
+}
+
+void MT4Conn::releaseChartInfo(RateInfo*& chart)
+{
+	m_directInter->MemFree(chart);
+}
+
+int MT4Conn::chartInfoUpdate(const std::string symbol, const int period, int size, const RateInfo* rates, std::string& err)
+{
+	std::lock_guard<std::mutex> lock(m_directMtx);
+	int res = m_directInter->ChartUpdate(symbol.c_str(), period, rates, &size);
+	if (res != RET_OK)
+		err = m_directInter->ErrorDescription(res);
+	return res;
 }

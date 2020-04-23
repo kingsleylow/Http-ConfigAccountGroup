@@ -31,27 +31,32 @@ HttpServer::HttpServer()
 	std::string symbols = Config::getInstance().getHTTPConf().find("account-group-symbols")->second;
 	std::string reports = Config::getInstance().getHTTPConf().find("account-group-reports")->second;
 	std::string common_groups = Config::getInstance().getHTTPConf().find("common-account-groups")->second;
-	std::string common_securities = Config::getInstance().getHTTPConf().find("common-symbol-groups")->second;
-	std::string securities_auto = Config::getInstance().getHTTPConf().find("account-group-securities-auto")->second;
-
+	std::string securities_auto = Config::getInstance().getHTTPConf().find("account-group-securities-auto")->second; 
 	std::string securities_auto_get = securities_auto + "-get";
 	std::string securities_auto_set = securities_auto + "-set";
-
 	std::string accounts = Config::getInstance().getHTTPConf().find("account-configuration")->second;
-
 	std::string global_datafeed = Config::getInstance().getHTTPConf().find("datafeed-configuration")->second;
 	std::string global_common =  Config::getInstance().getHTTPConf().find("common-configuration")->second;
 	std::string global_iplist =  Config::getInstance().getHTTPConf().find("ip-access-configuration")->second;
-	std::string global_symbols_list =  Config::getInstance().getHTTPConf().find("symbols-list")->second;
 	std::string global_symbol_conf = Config::getInstance().getHTTPConf().find("symbol-configuration")->second;
 	std::string global_dc = Config::getInstance().getHTTPConf().find("data-center-configuration")->second;
 	std::string global_plugin =  Config::getInstance().getHTTPConf().find("plugin-configuration")->second;
 	std::string global_performance =  Config::getInstance().getHTTPConf().find("performance-configuration")->second;
-
-	std::string get_holiday = Config::getInstance().getHTTPConf().find("get-holiday")->second;
 	std::string set_sessions = Config::getInstance().getHTTPConf().find("set-symbol-session")->second;
 	std::string set_swap = Config::getInstance().getHTTPConf().find("set-swap")->second;
 	std::string modify_open_price = Config::getInstance().getHTTPConf().find("modify-open_price")->second;
+	std::string symbol_trade_mode = Config::getInstance().getHTTPConf().find("modify-symbol-trade-mode")->second;
+
+	std::string con_symbol = Config::getInstance().getHTTPConf().find("consymbol")->second;
+	std::string update_consymbol = Config::getInstance().getHTTPConf().find("update-consymbol")->second;
+	std::string trade = Config::getInstance().getHTTPConf().find("trade")->second;
+	std::string get_trade = Config::getInstance().getHTTPConf().find("get-trade")->second;
+	std::string update_trade = Config::getInstance().getHTTPConf().find("update-trade")->second;
+	std::string chart_req = Config::getInstance().getHTTPConf().find("chart-req")->second;
+	std::string chart_update = Config::getInstance().getHTTPConf().find("chart-update")->second;
+	std::string global_symbols_list = Config::getInstance().getHTTPConf().find("symbols-list")->second;       //symbols-list
+	std::string get_holiday = Config::getInstance().getHTTPConf().find("get-holiday")->second;
+	std::string common_securities = Config::getInstance().getHTTPConf().find("common-symbol-groups")->second; //securities-list
 	m_uri = { {common, COMMON},
 	{permissions, PERMISSIONS},
 	{archiving, ARCHIVING},
@@ -75,7 +80,15 @@ HttpServer::HttpServer()
 	{get_holiday, GET_HOLIDAY},
 	{set_sessions, SET_SESSIONS} ,
 	{set_swap, SET_SWAP},
-	{modify_open_price, MODIFY_OPENPRICE} };
+	{modify_open_price, MODIFY_OPENPRICE},
+	{symbol_trade_mode, SET_SYMBOL_TRADEMODE} ,
+	{con_symbol, CON_SYMBOL},
+	{update_consymbol, UPDATE_CONSYMBOL},
+	{trade, TRADE},
+	{get_trade, GET_TRADE},
+	{update_trade, UPDATE_TRADE},
+	{chart_update, CHART_UPDATE},
+	{chart_req, CHART_REQ} };
 }
 
 HttpServer::~HttpServer()
@@ -95,12 +108,6 @@ bool HttpServer::initServerHttp()
 
 	evthread_use_windows_threads();
 
-	//CRYPTO_set_mem_functions(HttpServer::my_zeroing_malloc, realloc, free);
-	//SSL_library_init();
-	//SSL_load_error_strings();
-	//OpenSSL_add_all_algorithms();
-	//Logger::getInstance()->info("Using OpenSSL version [{}], libevent version [{}]", SSLeay_version(SSLEAY_VERSION), event_get_version());
-
 	m_evBase = event_base_new();
 	if (m_evBase == nullptr)
 	{
@@ -114,34 +121,6 @@ bool HttpServer::initServerHttp()
 		Logger::getInstance()->error("Couldn't create evhttp: exiting");
 		return false;
 	}
-
-	//m_ctx = SSL_CTX_new(SSLv23_server_method());
-	//SSL_CTX_set_options(m_ctx, SSL_OP_SINGLE_DH_USE | SSL_OP_SINGLE_ECDH_USE |SSL_OP_NO_SSLv2);
-
-	//m_ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
-	//if (nullptr == m_ecdh)
-	//{
-	//	Logger::getInstance()->error("EC_KEY_new_by_curve_name failed.");
-	//	return false;
-	//}
-
-	//if (1 != SSL_CTX_set_tmp_ecdh(m_ctx, m_ecdh))
-	//{
-	//	Logger::getInstance()->error("SSL_CTX_set_tmp_ecdh failed.");
-	//	return false;
-	//}
-
-	//std::string path = Config::getInstance().getExePath();
-	//std::string certificate_chain = path + Config::getInstance().getHTTPConf().find("certificate")->second;
-	//std::string private_key = path + Config::getInstance().getHTTPConf().find("private_key")->second;
-	//
-	//if (!serverSetupCerts(m_ctx, certificate_chain.c_str(), private_key.c_str()))
-	//{
-	//	Logger::getInstance()->error("setup certificate failed.exit...");
-	//	return false;
-	//}
-
-	//evhttp_set_bevcb(m_http, bevCb, m_ctx);
 
 	evhttp_set_gencb(m_http, HttpServer::cbFunc, this);
 
@@ -253,36 +232,38 @@ void HttpServer::cbFunc(struct evhttp_request *req, void *args)
 
 
 	int res = 0;
-	std::string des;
+	int mt4res = 0;
 	std::string response = "";
 	if (pSelf->parseReq(req, method, uri, uriArgs, body))
 	{
-		res = pSelf->handleReq(method, uri, uriArgs, body, des, response);
-	}
-	else
-	{
-		des = R"("http service parse failed")";
+		res = pSelf->handleReq(method, uri, uriArgs, body, response, mt4res);
 	}
 
 	rapidjson::StringBuffer sb;
 	rapidjson::Writer<rapidjson::StringBuffer> w(sb);
 	w.StartObject();
 
-	w.Key("code");
+	w.Key("IsSucc");
 	w.Int(res);
 
-	w.Key("description");
-	w.String(des.c_str());
+	w.Key("RetCode");
+	w.Int(mt4res);
 
-	w.Key("response");
+	w.Key("Result");
 	if (response.empty())
 	{
-		w.StartObject();
-		w.EndObject();
+		/*w.StartObject();
+		w.EndObject();*/
+		w.String("");
+	}
+	else if(response.find("{") != std::string::npos 
+		|| response.find("[") != std::string::npos)
+	{
+		w.RawValue(response.c_str(), response.length(), rapidjson::Type::kObjectType);
 	}
 	else
 	{
-		w.RawValue(response.c_str(), response.length(), rapidjson::Type::kObjectType);
+		w.String(response.c_str());
 	}
 	
 
@@ -298,7 +279,7 @@ void HttpServer::cbFunc(struct evhttp_request *req, void *args)
 	evhttp_add_header(oh, "Content-length", std::to_string(resp.size()).c_str());
 
 	evbuffer_add_printf(evb, "%s", resp.c_str());
-	Logger::getInstance()->info("response [{}]", resp);
+	//Logger::getInstance()->info("response [{}]", resp);
 
 	switch (res)
 	{
@@ -310,31 +291,31 @@ void HttpServer::cbFunc(struct evhttp_request *req, void *args)
 	break;
 	case BAD_URL:
 	{
-		evhttp_send_reply(req, 404, "Not Found", evb);
+		evhttp_send_reply(req, 200, "OK", evb);
 		Logger::getInstance()->error("response: bad url！");
 	}
 	break;
 	case BAD_METHOD:
 	{
-		evhttp_send_reply(req, 405, "Method Not Allowed", evb);
+		evhttp_send_reply(req, 200, "OK", evb);
 		Logger::getInstance()->error("response: method not allowed！");
 	}
 	break;
 	case PARAM_INVALID:
 	{
-		evhttp_send_reply(req, 400, "Bad Request", evb);
+		evhttp_send_reply(req, 200, "OK", evb);
 		Logger::getInstance()->error("response: bad request！");
 	}
 	break;
 	case SERVER_ERROR:
 	{
-		evhttp_send_reply(req, 500, "Internal Server Error", evb);
+		evhttp_send_reply(req, 200, "OK", evb);
 		Logger::getInstance()->error("response: internal server error！");
 	}
 	break;
 	default:
 	{
-		evhttp_send_reply(req, 500, "Internal Server Error", evb);
+		evhttp_send_reply(req, 200, "OK", evb);
 		Logger::getInstance()->error("response: internal server error!");
 	}
 	break;
@@ -441,7 +422,7 @@ bool HttpServer::parseReq(struct evhttp_request* req, evhttp_cmd_type& method, s
 	return bRes;
 }
 
-int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri, const std::map<std::string, std::string>& uriArgs, const std::string& body,std::string& des, std::string& response)
+int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri, const std::map<std::string, std::string>& uriArgs, const std::string& body, std::string& response, int& mt4res)
 {
 	int res = OK;
 	if (method == EVHTTP_REQ_POST)
@@ -449,46 +430,61 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 		switch (m_uri[uri])
 		{
 		case COMMON:
-			res = setGroupCommon(body, des, response);
+			res = setGroupCommon(body, response, mt4res);
 			break;
 		case PERMISSIONS:
-			res = setGroupPermission(body, des, response);
+			res = setGroupPermission(body, response, mt4res);
 			break;
 		case ARCHIVING:
-			res = setGroupArchive(body, des, response);
+			res = setGroupArchive(body, response, mt4res);
 			break;
 		case MARGINS:
-			res = setGroupMargins(body, des, response);
+			res = setGroupMargins(body, response, mt4res);
 			break;
 		case SECURITIES:
-			res = setGroupSecurities(body, des, response);
+			res = setGroupSecurities(body, response, mt4res);
 			break;
 		case SYMBOLS:
-			res = setGroupSymbols(body, des, response);
+			res = setGroupSymbols(body, response, mt4res);
 			break;
 		case REPORTS:
-			res = setGroupReport(body, des, response);
+			res = setGroupReport(body, response, mt4res);
 			break;
 		case ACCOUNT_CONFIGUTATION:
-			res = setAccount(body, des, response);
+			res = setAccount(body, response, mt4res);
 			break;
 		case GLOBAL_SYMBOL:
-			res = getGlobalSymbol(body, des, response);
+			res = getGlobalSymbol(body, response, mt4res);
 			break;
 		case GLOBAL_PERFORMANCE:
-			res = getGlobalPerformance(body, des, response);
+			res = getGlobalPerformance(body, response, mt4res);
 			break;
 		case SET_SESSIONS:
-			res = setSessions(body, des, response);
+			res = setSessions(body, response, mt4res);
 			break;
 		case SET_SWAP:
-			res = setSwap(body, des, response);
+			res = setSwap(body, response, mt4res);
 			break;
 		case MODIFY_OPENPRICE:
-			res = modifyOpenPrice(body, des, response);
+			res = modifyOpenPrice(body, response, mt4res);
+			break;
+		case UPDATE_CONSYMBOL:
+			res = updateConSymbol(body, response, mt4res);
+			break;
+		case TRADE:
+			res = tradeTransaction(body, response, mt4res);
+			break;
+		case UPDATE_TRADE:
+			res = updateTransaction(body, response, mt4res);
+			break;
+		case CHART_REQ:
+			res = chartReq(body, response, mt4res);
+			break;
+		case CHART_UPDATE:
+			res = chartUpdate(body, response, mt4res);
 			break;
 		default:
-			des = "bad url or request method not right";
+			//response = R"( {"bad url or request method not right." } )";
 			res = BAD_URL;
 			break;
 		}
@@ -498,190 +494,213 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 		switch (m_uri[uri])
 		{
 		case COMMON:
-			res = getGroupCommon(uriArgs,des, response);
+			res = getGroupCommon(uriArgs, response, mt4res);
 			break;
 		case PERMISSIONS:
-			res = getGroupPermission(uriArgs, des, response);
+			res = getGroupPermission(uriArgs, response, mt4res);
 			break;
 		case ARCHIVING:
-			res = getGroupArchive(uriArgs,des, response);
+			res = getGroupArchive(uriArgs, response, mt4res);
 			break;
 		case MARGINS:
-			res = getGroupMargins(uriArgs,des, response);
+			res = getGroupMargins(uriArgs, response, mt4res);
 			break;
 		case SECURITIES:
-			res = getGroupSecurities(uriArgs,des, response);
+			res = getGroupSecurities(uriArgs, response, mt4res);
 			break;
 		case SYMBOLS:
-			res = getGroupSymbols(uriArgs, des, response);
+			res = getGroupSymbols(uriArgs, response, mt4res);
 			break;
 		case REPORTS:
-			res = getGroupReport(uriArgs,des, response);
+			res = getGroupReport(uriArgs, response, mt4res);
 			break;
 		case COMMON_GROUPS:
-			res = getGroupsNames(des, response);
+			res = getGroupsNames(response, mt4res);
 			break;
 		case COMMON_SECURITIES:
-			res = getSecuritiesNames(des, response);
+			res = getSecuritiesNames(response, mt4res);
 			break;
 		case SECURITIES_AUTO_GET:  //get
-			res = getAllGroupsSecurities(des, response);
+			res = getAllGroupsSecurities(response, mt4res);
 			break;
 		case SECURITIES_AUTO_SET:  //set
-			res = setAllGroupsSecurities(des, response);
+			res = setAllGroupsSecurities(response, mt4res);
 			break;
 		case GLOBAL_DATAFEED:
-			res = getGlobalDatafeed(des, response);
+			res = getGlobalDatafeed(response, mt4res);
 			break;
 		case GLOBAL_COMMON:
-			res = getGlobalCommon(des, response);
+			res = getGlobalCommon(response, mt4res);
 			break;
 		case GLOBAL_IP:
-			res = getGlobalIPlist(des, response);
+			res = getGlobalIPlist(response, mt4res);
 			break;
 		case GLOBAL_SYMBOLS_LIST:
-			res = getGlobalSymbolsList(des, response);
+			res = getGlobalSymbolsList(response, mt4res);
 			break;
 		case GLOBAL_DC:
-			res = getGlobalDC(des, response);
+			res = getGlobalDC(response, mt4res);
 			break;
 		case GLOBAL_PLUGIN:
-			res = getGlobalPlugin(des, response);
+			res = getGlobalPlugin(response, mt4res);
 			break;
 		case GET_HOLIDAY:
-			res = getHoliday(des, response);
+			res = getHoliday(response, mt4res);
+			break;
+		case SET_SYMBOL_TRADEMODE:
+			res = setConSymbolTradeMode(uriArgs, response, mt4res);
+			break;
+		case CON_SYMBOL:
+			res = getConSymbol(uriArgs, response, mt4res);
+			break;
+		case GET_TRADE:
+			res = getTrades(uriArgs, response, mt4res);
 			break;
 		default:
-			des = "bad url or request method not right";
+			//response = R"( { "bad url or request method not right." })";
 			res = BAD_URL;
 			break;
 		}
 	}
 	else
 	{
-		response = "not support the request method, only can ues get and post for now.";
+		//response = R"( { "not support the request method, only can ues get and post for now."})";
 		res = BAD_METHOD;
 	}
 
 	return res;
 }
 
-int HttpServer::setGroupSecurities(const std::string& body, std::string& des, std::string& response)
+int HttpServer::setGroupSecurities(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
 	std::map<int, ConGroupSec> sec;
 	std::set<int> index;
 	std::string group;
+	std::string err;
 	if (Utils::getInstance().parseFromJsonToSec(body, sec, index, group))
 	{
-		if (m_mt4Conn->updateGroupSec(group, sec, index))
+		if (0 == (mt4res = m_mt4Conn->updateGroupSec(group, sec, index, err)))
 		{
 			Logger::getInstance()->info("update group securities success.");
-			des = "update group securities success.";
+			//response = R"( { "update group securities success."} )";
+		}
+		else if (-1 == mt4res)
+		{
+			res = SERVER_ERROR;
+			//response = R"({ "server internal error." })";
 		}
 		else
 		{
-			des = "update group securities failed.";
-			res = SERVER_ERROR;
+			//response = "{\" " + err + "\" }";
+			res = 0;
 		}
 	}
 	else
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"( { "param invalid.please check and try again." })";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupCommon(const std::string& body,std::string& des, std::string& response)
+int HttpServer::setGroupCommon(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
 	GroupCommon groupCommon;
 	std::string group;
+	std::string err;
 	if (Utils::getInstance().parseFromJsonToCommon(body, groupCommon, group))
 	{
-		if (m_mt4Conn->updateGroupCommon(group, groupCommon))
+		if (0 == (mt4res = m_mt4Conn->updateGroupCommon(group, groupCommon, err)))
 		{
 			Logger::getInstance()->info("update group common success.");
-			des = "update group common success.";
+			//response = R"( { "update group common success."} )";
+		}
+		else if(-1 == mt4res)
+		{
+			res = SERVER_ERROR;
+			//response = R"({ "server internal error." })";
 		}
 		else
 		{
-			des = "update group common failed.";
-			res = SERVER_ERROR;
+			//response = "{\" " + err + "\" }";
+			res = 0;
 		}
 	}
 	else
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"( { "param invalid.please check and try again." })";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupSymbols(const std::string& body, std::string& des, std::string& response)
+int HttpServer::setGroupSymbols(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
 	std::map<std::string, ConGroupMargin> margins;
 	std::string group;
+	std::string err;
 	if (Utils::getInstance().parseFromJsonToSymbol(body, margins, group))
 	{
-		if (m_mt4Conn->updateGroupSymbol(group, margins))
+		if (0 == (mt4res = m_mt4Conn->updateGroupSymbol(group, margins, err)))
 		{
 			Logger::getInstance()->info("update group securities success.");
-			des = "update group securities success.";
+			//response = R"( { "update group securities success."} )";
+		}
+		else if (-1 == mt4res)
+		{
+			res = SERVER_ERROR;
+			//response = R"({ "server internal error." })";
 		}
 		else
 		{
-			des = "update group securities failed.";
-			res = SERVER_ERROR;
+			//response = "{ \"" + err + "\" }";
+			res = 0;
 		}
 	}
 	else
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"( { "param invalid.please check and try again." })";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::getGroupCommon(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
+int HttpServer::getGroupCommon(const std::map<std::string, std::string>& uriArgs,std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"( { "param invalid.please check and try again." })";
 		res = PARAM_INVALID;
 		return res;
 	}
 	GroupCommon groupComm;//default constructor
 	groupComm = m_mt4Conn->getGroupCommon(uriArgs.at("Group"));
-	/*if (groupComm.group.empty())
-	{
-		des = "Group is not existed, pls check.";
-		res = PARAM_INVALID;
-		return res;
-	}*/
+
 	if (Utils::getInstance().parseFromCommonToJson(uriArgs.at("Group"), groupComm, response))
 	{
 		Logger::getInstance()->info("serialize group common success.");
-		des = "get group common success.";
 	}
 	else
 	{
-		des = "serialize group common failed.";
+		//response = R"( {"serialize group common failed." })";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGroupSecurities(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
+int HttpServer::getGroupSecurities(const std::map<std::string, std::string>& uriArgs, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	ConGroup conGroup = { 0 };
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"( { "param invalid.please check and try again." })";
 		res = PARAM_INVALID;
 		return res;
 	}
@@ -690,23 +709,23 @@ int HttpServer::getGroupSecurities(const std::map<std::string, std::string>& uri
 	if (Utils::getInstance().parseFromSecToJson(conGroup.group, conGroup.secgroups, size, response))
 	{
 		Logger::getInstance()->info("serialize group securities success.");
-		des = "get group securities success.";
 	}
 	else
 	{
-		des = "serialize group securities failed.";
+		//response = R"( {"serialize group securities failed." })";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGroupSymbols(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
+int HttpServer::getGroupSymbols(const std::map<std::string, std::string>& uriArgs, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	ConGroup conGroup = { 0 };
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"( { "param invalid.please check and try again." })";
 		res = PARAM_INVALID;
 		return res;
 	}
@@ -715,74 +734,75 @@ int HttpServer::getGroupSymbols(const std::map<std::string, std::string>& uriArg
 	if (Utils::getInstance().parseFromSymbolToJson(conGroup.group, conGroup.secmargins, size, response))
 	{
 		Logger::getInstance()->info("serialize group margins success.");
-		des = "get group symbols success.";
 	}
 	else
 	{
-		des = "serialize group margins failed.";
+		//response = R"( { "serialize group margins failed." })";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGroupsNames(std::string& des, std::string& response)
+int HttpServer::getGroupsNames(std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	std::vector<std::string> common_groups;
 	if (m_mt4Conn->getGroupNames(common_groups))
 	{
 		if (Utils::getInstance().parseFromCommonGroupsToJson(common_groups, response))
 		{
 			Logger::getInstance()->info("serialize groups success.");;
-			des = "get group names success.";
 		}
 		else
 		{
-			des = "serialize groups failed.";
+			//response = R"({ "serialize groups failed."})";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		des = "get groups failed.";
+		//response = R"({"get groups failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getSecuritiesNames(std::string& des, std::string& response)
+int HttpServer::getSecuritiesNames(std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	ConSymbolGroup securities[MAX_SEC_GROUPS] = { 0 };
-	if (0 == m_mt4Conn->getSecuritiesNames(securities))
+	if (0 == (mt4res = m_mt4Conn->getSecuritiesNames(securities, response)))
 	{
 		int size = sizeof(securities) / sizeof(ConSymbolGroup);
 		if (Utils::getInstance().parseFromCommmonSecuritesToJson(securities, size, response))
 		{
 			Logger::getInstance()->info("serialize securities success.");
-			des = "get sucurities name success.";
 		}
 		else
 		{
-			des = "serialize securities failed.";
+			//response = R"({ "serialize securities failed."})";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		des = "get securites failed.";
+		//response = "{ \"" + response + "\" }"; 
 		res = SERVER_ERROR;
+		mt4res = 0;
 	}
 	return res;
 }
 
-int HttpServer::getGroupMargins(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
+int HttpServer::getGroupMargins(const std::map<std::string, std::string>& uriArgs, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	GroupMargin margin;
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"({"param invalid.please check and try again."})";
 		res = PARAM_INVALID;
 		return res;
 	}
@@ -791,24 +811,24 @@ int HttpServer::getGroupMargins(const std::map<std::string, std::string>& uriArg
 	if (Utils::getInstance().parseFromMarginToJson(uriArgs.at("Group"), margin,  response))
 	{
 		Logger::getInstance()->info("serialize group margins success.");
-		des = "get group margin success.";
 	}
 	else
 	{
-		des = "serialize group margins failed.";
+		//response = R"({"serialize group margins failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
 
-int HttpServer::getGroupArchive(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
+int HttpServer::getGroupArchive(const std::map<std::string, std::string>& uriArgs, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	GroupArchive archive;
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"({"param invalid.please check and try again."})";
 		res = PARAM_INVALID;
 		return res;
 	}
@@ -817,23 +837,23 @@ int HttpServer::getGroupArchive(const std::map<std::string, std::string>& uriArg
 	if (Utils::getInstance().parseFromArchiveToJson(uriArgs.at("Group"), archive, response))
 	{
 		Logger::getInstance()->info("serialize group archive success.");
-		des = "get group archive success.";
 	}
 	else
 	{
-		des = "serialize group archive failed.";
+		//response = R"({"serialize group archive failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGroupReport(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
+int HttpServer::getGroupReport(const std::map<std::string, std::string>& uriArgs, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	GroupReport report;
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"({"param invalid.please check and try again."})";
 		res = PARAM_INVALID;
 		return res;
 	}
@@ -841,24 +861,24 @@ int HttpServer::getGroupReport(const std::map<std::string, std::string>& uriArgs
 
 	if (Utils::getInstance().parseFromReportToJson(uriArgs.at("Group"), report, response))
 	{
-		Logger::getInstance()->info("serialize group report success.");
-		des = "get group report success.";
+		//Logger::getInstance()->info("serialize group report success.");
 	}
 	else
 	{
-		des = "serialize group report failed.";
+		//response = R"({ "serialize group report failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGroupPermission(const std::map<std::string, std::string>& uriArgs, std::string& des, std::string& response)
+int HttpServer::getGroupPermission(const std::map<std::string, std::string>& uriArgs, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	GroupPermission permission;
 	if (uriArgs.find("Group") == uriArgs.end())
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"({"param invalid.please check and try again."})";
 		res = PARAM_INVALID;
 		return res;
 	}
@@ -867,151 +887,156 @@ int HttpServer::getGroupPermission(const std::map<std::string, std::string>& uri
 	if (Utils::getInstance().parseFromPermissionToJson(uriArgs.at("Group"), permission, response))
 	{
 		Logger::getInstance()->info("serialize group permission success.");
-		des = "get group permission success.";
 	}
 	else
 	{
-		des = "serialize group permission failed.";
+		//response = R"({"serialize group permission failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::setAccount(const std::string& body, std::string& des, std::string& response)
+int HttpServer::setAccount(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	AccountConfiguration configuration;
 	std::string login;
 	if (Utils::getInstance().parseFromJsonToAccuntConfiguration(body, configuration, login))
 	{
-		if (m_mt4Conn->updateAccounts(login, configuration))
+		if (0 == (mt4res = m_mt4Conn->updateAccounts(login, configuration, response)))
 		{
 			Logger::getInstance()->info("update account configuration success.");
-			des = "update account configuration success.";
+			//response = R"({"update account configuration success."})";
 		}
 		else
 		{
-			des = "update account configuration failed.";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"({"param invalid.please check and try again."})";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupMargins(const std::string& body, std::string& des, std::string& response)
+int HttpServer::setGroupMargins(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	GroupMargin margins;
 	std::string group;
 	if (Utils::getInstance().parseFromJsonToMargin(body, margins, group))
 	{
-		if (m_mt4Conn->updateGroupMargin(group, margins))
+		if (0 == (mt4res = m_mt4Conn->updateGroupMargin(group, margins, response)))
 		{
 			Logger::getInstance()->info("update group margin success.");
-			des = "update group margin success.";
+			//response = R"({"update group margin success."})";
 		}
-		else
+		else if(-1 == mt4res)
 		{
-			des = "update group margin failed.";
+			//response = R"({"update group margin failed."})";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"( {"param invalid.please check and try again."})";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupArchive(const std::string& body, std::string& des, std::string& response)
+int HttpServer::setGroupArchive(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	GroupArchive archive;
 	std::string group;
 	if (Utils::getInstance().parseFromJsonToArchive(body, archive, group))
 	{
-		if (m_mt4Conn->updateGroupArchive(group, archive))
+		if (0 == (mt4res = m_mt4Conn->updateGroupArchive(group, archive, response)))
 		{
 			Logger::getInstance()->info("update group archive success.");
-			des = "update group archive success.";
+			//response = R"({"update group archive success."})";
 		}
-		else
+		else if(-1 == mt4res)
 		{
-			des = "update group archive failed.";
+			//response = R"({"update group archive failed."})";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"({"param invalid.please check and try again."})";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupReport(const std::string& body, std::string& des, std::string& response)
+int HttpServer::setGroupReport(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	GroupReport report;
 	std::string group;
 	if (Utils::getInstance().parseFromJsonToReport(body, report, group))
 	{
-		if (m_mt4Conn->upateGroupReport(group, report))
+		if (0 == (mt4res = m_mt4Conn->upateGroupReport(group, report, response)))
 		{
 			Logger::getInstance()->info("update group report success.");
-			des = "update group report success.";
+			//response = R"({"update group report success."})";
 		}
-		else
+		else if(-1 == mt4res)
 		{
-			des = "update group report failed.";
+			//response = R"({"update group report failed."})";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"({"param invalid.please check and try again."})";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::setGroupPermission(const std::string& body, std::string& des, std::string& response)
+int HttpServer::setGroupPermission(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	GroupPermission permission;
 	std::string group;
 	if (Utils::getInstance().parseFromJsonToPermission(body, permission, group))
 	{
-		if (m_mt4Conn->updateGroupPerssion(group, permission))
+		if (0 == (mt4res = m_mt4Conn->updateGroupPerssion(group, permission, response)))
 		{
 			Logger::getInstance()->info("update group permission success.");
-			des = "update group permission success.";
+			//response = R"({"update group permission success."})";
 		}
-		else
+		else if(-1 == mt4res)
 		{
-			des = "update group permission failed.";
+			//response = R"({"update group permission failed."})";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
-		des = "param invalid.please check and try again.";
+		//response = R"({"param invalid.please check and try again."})";
 		res = PARAM_INVALID;
 	}
 	return res;
 }
 
-int HttpServer::getAllGroupsSecurities(std::string& des, std::string& response)
+int HttpServer::getAllGroupsSecurities(std::string& response, int& mt4res)
 {
+	int res = 0;
+	mt4res = 0;
 	std::map<int, std::string> securitiesMap;
 	ConSymbolGroup securities[MAX_SEC_GROUPS] = { 0 };
-	if (0 == m_mt4Conn->getSecuritiesNames(securities))
+	if (0 == (mt4res = m_mt4Conn->getSecuritiesNames(securities, response)))
 	{
 		int size = sizeof(securities) / sizeof(ConSymbolGroup);
 		for (int i = 0; i < size; i++)
@@ -1021,8 +1046,8 @@ int HttpServer::getAllGroupsSecurities(std::string& des, std::string& response)
 	}
 	else
 	{
-		des = "operate failed.";
-		return SERVER_ERROR;
+		//response = "{" + response + "}";
+		return res;
 	}
 
 	std::vector<std::string> common_groups;
@@ -1037,22 +1062,22 @@ int HttpServer::getAllGroupsSecurities(std::string& des, std::string& response)
 			{
 				if (!SqliteClient::getInstance().add(i, securitiesMap[i], conGroup))
 				{
-					des = "operate failed.";
+					//response = R"({"operate failed."})";
 					return SERVER_ERROR;
 				}
 			}
 		}
-		des = "operate success";
+		//response = R"({"operate success."})";
 		return OK;
 	}
 	else
 	{
-		des = "operate failed.";
+		//response = R"({"operate failed."})";
 		return SERVER_ERROR;
 	}
 }
 
-int HttpServer::setAllGroupsSecurities(std::string& des, std::string& response)
+int HttpServer::setAllGroupsSecurities(std::string& response, int& mt4res)
 {
 	//std::unordered_map<std::string, std::vector<std::string>> records;
 	std::vector<std::vector<std::string>> records;
@@ -1087,21 +1112,22 @@ int HttpServer::setAllGroupsSecurities(std::string& des, std::string& response)
 			std::set<int> sIndex;
 			sIndex.insert(std::stoi(r.at(0)));
 
-			if (m_mt4Conn->updateGroupSec(r.at(2), sec, sIndex))
+			std::string err;
+			if (0 == m_mt4Conn->updateGroupSec(r.at(2), sec, sIndex, err))
 			{
 				Logger::getInstance()->info("update group securities success.");
 			}
 			else
 			{
-				Logger::getInstance()->info("update group securities failed.");
+				Logger::getInstance()->info("update group securities failed. {}", err);
 			}
 		}
-		des = "operate success";
+		//response = R"({"operate success."})";
 		return OK;
 	}
 	else
 	{
-		des = "operate failed.";
+		//response = R"({"operate failed."})";
 		return SERVER_ERROR;
 	}
 }
@@ -1115,19 +1141,21 @@ void HttpServer::readdb(ConGroupSec value,int index, std::string group, void* se
 	std::set<int> sIndex;
 	sIndex.insert(index);
 
-	if (pThis->m_mt4Conn->updateGroupSec(group, sec, sIndex))
+	std::string err;
+	if (0 == pThis->m_mt4Conn->updateGroupSec(group, sec, sIndex, err))
 	{
 		Logger::getInstance()->info("update group securities success.");
 	}
 	else
 	{
-		Logger::getInstance()->info("update group securities failed.");
+		Logger::getInstance()->info("update group securities failed. {}", err);
 	}
 }
 
 
-int HttpServer::getGlobalDatafeed(std::string& des, std::string& response)
+int HttpServer::getGlobalDatafeed(std::string& response, int& mt4res)
 {
+	mt4res = 0;
 	int res = 0;
 	int total = 0;
 	ConFeeder* feeder = m_mt4Conn->getGlobalDatafeed(total);
@@ -1135,111 +1163,114 @@ int HttpServer::getGlobalDatafeed(std::string& des, std::string& response)
 	if (Utils::getInstance().parseFromDatafeedToJson(feeder, total, response))
 	{
 		Logger::getInstance()->info("serialize datafeeder success.");
-		des = "get datafeeder list success.";
+		//response = R"({"get datafeeder list success."})";
 	}
 	else
 	{
-		des = "serialize datafeeder failed.";
+		//response = R"({"serialize datafeeder failed."})";
 		res = SERVER_ERROR;
 	}
 	m_mt4Conn->releaseGlobalDatafeed(feeder);
 	return res;
 }
-int HttpServer::getGlobalCommon(std::string& des, std::string& response)
+int HttpServer::getGlobalCommon(std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	ConCommon common = m_mt4Conn->getGlobalCommon();
 	if (Utils::getInstance().parseFromGlobalCommonToJson(common, response))
 	{
 		Logger::getInstance()->info("serialize global common success");
-		des = "get global common success.";
+		//response = R"({"get global common success.})";
 	}
 	else
 	{
-		des = "serialize global common failed.";
+		//response = R"({serialize global common failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
-int HttpServer::getGlobalIPlist(std::string& des, std::string& response)
+int HttpServer::getGlobalIPlist(std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	int total = 0;
 	ConAccess* ip = m_mt4Conn->getGlobalIPList(total);
 	if (Utils::getInstance().parseFromIPListToJson(ip, total, response))
 	{
 		Logger::getInstance()->info("serialize global ip-list success.");
-		des = "get access list success.";
+		//response = R"({"get access list success."})";
 	}
 	else
 	{
-		des = "serialize global ip-list failed.";
+		//response = R"({"serialize global ip-list failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGlobalSymbolsList(std::string& des, std::string& response)
+int HttpServer::getGlobalSymbolsList(std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	std::vector<ConSymbol> symbols;
-	if (!m_mt4Conn->getGlobalSymbols(symbols))
-	{
-		Logger::getInstance()->error("mt4 get symbols info failed.");
-		des = "mt4 get symbols info failed";
-		res = SERVER_ERROR;
-		return res;
-	}
-	else
+	if (0 == (mt4res = m_mt4Conn->getGlobalSymbols(symbols, response)))
 	{
 		if (Utils::getInstance().parseFromSymbolsListToJson(symbols, response))
 		{
 			Logger::getInstance()->info("serialize symbol list success.");
-			des = "get symbol list succes.";
 		}
 		else
 		{
 			Logger::getInstance()->info("serialize symbol list failed.");
-			des = "derialize symbol list failed.";
+			//response = R"({"derialize symbol list failed."})";
 			res = SERVER_ERROR;
 		}
 	}
+	else
+	{
+		Logger::getInstance()->error("mt4 get symbols info failed.");
+		//response = R"({"mt4 get symbols info failed."})";
+		res = SERVER_ERROR;
+		return res;
+	}
 	return res;
 }
-int HttpServer::getGlobalSymbol(const std::string& body, std::string& des, std::string& response)
+int HttpServer::getGlobalSymbol(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	std::string symbol;
 	if (!Utils::getInstance().parseFromJsonToSymbol(body, symbol))
 	{
-		des = "invalid param";
+		//response = R"({"invalid param."})";
 		res = PARAM_INVALID;
 		return res;
 	}
 	ConSymbol con = {};
-	if (m_mt4Conn->getGlobalSymbols(symbol, con) && Utils::getInstance().parseFromSymbolToJson(con, response))
+	if (0 != (mt4res = m_mt4Conn->getGlobalSymbols(symbol, con, response)) && Utils::getInstance().parseFromSymbolToJson(con, response))
 	{
 		Logger::getInstance()->info("serial symbol conf success.");
-		des = "get symbol conf success.";
 	}
 	else
 	{
 		Logger::getInstance()->error("get symbol conf failed.");
-		des = "get symbol conf failed.";
+		//response = R"({"get symbol conf failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getGlobalDC(std::string& des, std::string& response)
+int HttpServer::getGlobalDC(std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	int total = 0;
 	ConDataServer* dc = m_mt4Conn->getGlobalDCList(total);
 	if (NULL == dc)
 	{
 		Logger::getInstance()->error("dc list get failed");
-		des = "dc list get failed.";
+		//response = R"({"dc list get failed."})";
 		res = SERVER_ERROR;
 	}
 	else
@@ -1247,27 +1278,27 @@ int HttpServer::getGlobalDC(std::string& des, std::string& response)
 		if (Utils::getInstance().parseFromDCListToJson(dc, total, response))
 		{
 			Logger::getInstance()->info("dc list serialize success.");
-			des = "get dc list success.";
 		}
 		else
 		{
 			Logger::getInstance()->error("dc list serialize failed.");
-			des = "dc list derialize failed.";
+			//response = R"({"dc list derialize failed."})";
 			res = SERVER_ERROR;
 		}
 		m_mt4Conn->releaseGlobalDCList(dc);
 	}
 	return res;
 }
-int HttpServer::getGlobalPlugin(std::string& des, std::string& response)
+int HttpServer::getGlobalPlugin(std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	int total = 0;
 	ConPluginParam* cp = m_mt4Conn->getGlobalPluginList(total);
 	if (NULL == cp)
 	{
 		Logger::getInstance()->error("cp list get failed.");
-		des = "plugin list get failed.";
+		//response = R"({plugin list get failed."})";
 		res = SERVER_ERROR;
 	}
 	else
@@ -1275,25 +1306,25 @@ int HttpServer::getGlobalPlugin(std::string& des, std::string& response)
 		if (Utils::getInstance().parseFromPluginListToJson(cp, total, response))
 		{
 			Logger::getInstance()->info("cp list serialize success.");
-			des = "get plugin list success.";
 		}
 		else
 		{
 			Logger::getInstance()->error("cp list serialize failed.");
-			des = "plugin list derialize failed.";
+			//response = R"({"plugin list derialize failed."})";
 			res = SERVER_ERROR;
 		}
 		m_mt4Conn->releaseGlobalPluginList(cp);
 	}
 	return res;
 }
-int HttpServer::getGlobalPerformance(const std::string& body, std::string& des, std::string& response)
+int HttpServer::getGlobalPerformance(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	unsigned int from = 0;
 	if (!Utils::getInstance().parseFromJsonToPerformance(body, from))
 	{
-		des = "invalid param";
+		//response = R"({"invalid param."})";
 		res = PARAM_INVALID;
 		return res;
 	}
@@ -1302,69 +1333,70 @@ int HttpServer::getGlobalPerformance(const std::string& body, std::string& des, 
 	if (NULL != (pi = m_mt4Conn->getGlobalPerformance(from, total)) && Utils::getInstance().parseFromPerformanceToJson(pi, total, response))
 	{
 		Logger::getInstance()->info("serial performance conf success.");
-		des = "get performance conf success.";
 	}
 	else
 	{
 		Logger::getInstance()->error("get performance conf failed.");
-		des = "get performance conf failed.";
+		//response = R"({"get performance conf failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::getHoliday(std::string& des, std::string& response)
+int HttpServer::getHoliday(std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	ConHoliday* ch = nullptr;
 	int total = 0;
 	if (NULL != (ch = m_mt4Conn->getHoliday(total)) &&
 		Utils::getInstance().parseFromHolidayToJson(ch, total, response))
 	{
 		Logger::getInstance()->info("serial conholiday success.");
-		des = "get holiday conf success.";
 		m_mt4Conn->releaseHoliday(ch);
 	}
 	else
 	{
 		Logger::getInstance()->error("get holiday conf failed.");
-		des = "get holiday conf failed.";
+		//response = R"({"get holiday conf failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::setSessions(const std::string& body, std::string& des, std::string& response)
+int HttpServer::setSessions(const std::string& body,std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	ConSessions css[7] = {};
 	std::string symbol;
 	if (!body.empty() && Utils::getInstance().parseFromJsonToSession(body, css, symbol))
 	{
-		if (m_mt4Conn->updateSymbolsSessions(symbol, css))
+		if (0 == (mt4res = m_mt4Conn->updateSymbolsSessions(symbol, css, response)))
 		{
 			Logger::getInstance()->info("update symbol sessions success.");
-			des = "update symbol sessions success.";
+			//response = R"({"update symbol sessions success."})";
 		}
-		else
+		else if(-1 == mt4res)
 		{
 			Logger::getInstance()->info("update symbol sessions failed.");
-			des = "update symbol sessions failed.";
+			//response = R"({"update symbol sessions failed."})";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
 		Logger::getInstance()->error("unserialize sessions failed.");
-		des = "unserialize sessions failed.";
+		//response = R"({"unserialize sessions failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::setSwap(const std::string& body, std::string& des, std::string& response)
+int HttpServer::setSwap(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	std::string symbol;
 	int swap_long = 0;
 	int swap_short = 0;
@@ -1372,51 +1404,284 @@ int HttpServer::setSwap(const std::string& body, std::string& des, std::string& 
 	int swap_rollover = 0;
 	if (!body.empty() && Utils::getInstance().parseFromJsonToSwap(body, symbol, swap_long, swap_short, swap_enable, swap_rollover))
 	{
-		if (m_mt4Conn->setSymbolSwap(symbol, swap_long, swap_short, swap_enable, swap_rollover))
+		if (0 != (mt4res = m_mt4Conn->setSymbolSwap(response, symbol, swap_long, swap_short, swap_enable, swap_rollover)))
 		{
 			Logger::getInstance()->info("update symbol swap success.");
-			des = "update symbol swap success.";
+			//response = R"({"update symbol swap success."})";
 		}
-		else
+		else if(-1 == mt4res)
 		{
 			Logger::getInstance()->info("update symbol swap failed.");
-			des = "update symbol swap failed.";
+			//response = R"({"update symbol swap failed."})";
 			res = SERVER_ERROR;
 		}
 	}
 	else
 	{
 		Logger::getInstance()->error("unserialize swap failed.");
-		des = "unserialize swap failed.";
+		//response = R"({"unserialize swap failed."})";
 		res = SERVER_ERROR;
 	}
 	return res;
 }
 
-int HttpServer::modifyOpenPrice(const std::string& body, std::string& des, std::string& response)
+int HttpServer::modifyOpenPrice(const std::string& body, std::string& response, int& mt4res)
 {
 	int res = 0;
+	mt4res = 0;
 	int orderNo = 0;
 	double profit = 0;
 	if (!body.empty() && Utils::getInstance().parseFromJsonToOpenPrice(body, orderNo, profit))
 	{
-		if (m_mt4Conn->updateOrderOpenPrice(orderNo, profit))
+		if (0 != (mt4res = m_mt4Conn->updateOrderOpenPrice(orderNo, profit, response)))
 		{
 			Logger::getInstance()->info("update order open_price success.");
-			des = "update order open_price success.";
+			//response = R"({"update order open_price success."})";
+		}
+		else if(-1 == mt4res)
+		{
+			Logger::getInstance()->info("update order open_price failed.");
+			//response = R"({"update order open_price failed."})";
+			res = SERVER_ERROR;
 		}
 		else
 		{
-			Logger::getInstance()->info("update order open_price failed.");
-			des = "update order open_price failed.";
-			res = SERVER_ERROR;
+			//response = "{\"" + response + "\"}";
 		}
 	}
 	else
 	{
 		Logger::getInstance()->error("unserialize order open_price failed.");
-		des = "unserialize order open_price failed.";
+		//response = R"({"unserialize order open_price failed."})";
 		res = SERVER_ERROR;
+	}
+	return res;
+}
+
+int HttpServer::setConSymbolTradeMode(const std::map<std::string, std::string>& uriArgs, std::string& response, int& mt4res)
+{
+	int res = 0;
+	mt4res = 0;
+	if (uriArgs.find("symbol") == uriArgs.end() || uriArgs.find("tradeMode") == uriArgs.end())
+	{
+		//response = R"({"param invalid.please check and try again."})";
+		res = PARAM_INVALID;
+		return res;
+	}
+
+	if (0 == (mt4res = m_mt4Conn->setSymbolTradeMode(uriArgs.at("symbol"), std::stoi(uriArgs.at("tradeMode")), response)))
+	{
+		Logger::getInstance()->info("serialize group permission success.");
+		//response = R"({"get group permission success."})";
+	}
+	else if(-1 == mt4res)
+	{
+		//response = R"({"serialize group permission failed."})";
+		res = SERVER_ERROR;
+	}
+	else
+	{
+		//response = "{\"" + response + "\"}";
+	}
+	
+	return res;
+}
+
+int HttpServer::getConSymbol(const std::map<std::string, std::string>& uriArgs, std::string& response, int &mt4res)
+{
+	int res = 0;
+	mt4res = 0;
+	if (uriArgs.find("symbol") == uriArgs.end())
+	{
+		//response = R"({"param invalid.please check and try again."})";
+		res = PARAM_INVALID;
+		return res;
+	}
+
+	ConSymbol cs = {0};
+	if (0 == (mt4res = m_mt4Conn->getConSymbol(uriArgs.at("symbol"), cs, response)))
+	{
+		Logger::getInstance()->info("serialize group permission success.");
+		response = Utils::getInstance().serializeConSymbolToJson(0, 0, cs);
+	}
+	else
+	{
+		//response = R"({"param invalid."})";
+	}
+
+	return res;
+}
+
+int HttpServer::updateConSymbol(const std::string& body, std::string& response, int& mt4res)
+{
+	ConSymbol cs = {0};
+	mt4res = 0;
+	int res = 0;
+	if (!body.empty() && Utils::getInstance().unSerializeConSymbolToJson(body,cs))
+	{
+		if (0 == (mt4res = m_mt4Conn->updateConSymbol(cs)))
+		{
+			Logger::getInstance()->info("update consymbol success.");
+			//response = R"({"update order open_price success."})";
+		}
+		else
+		{
+			Logger::getInstance()->info("update consymbol failed.");
+		}
+	}
+	else
+	{
+		Logger::getInstance()->error("unserialize consymbol failed.");
+		//response = R"({"unserialize consymbol failed."})";
+		res = SERVER_ERROR;
+	}
+	return res;
+}
+
+int HttpServer::tradeTransaction(const std::string& body,std::string& response, int &mt4res)
+{
+	TradeTransInfo tti = { 0 };
+	int res = 0;
+	mt4res = 0;
+	if (!body.empty() && Utils::getInstance().unSerializeTradeTransInfo(body, tti))
+	{
+		if (0 == (mt4res = m_mt4Conn->tradeTransaction(&tti, response)))
+		{
+			Logger::getInstance()->info("trade transaction success.");
+			//response = R"({"trade transaction success."})";
+		}
+		else
+		{
+			Logger::getInstance()->info("trade transaction failed.");
+		}
+	}
+	else
+	{
+		Logger::getInstance()->error("unserialize tradetraninfo failed.");
+		//response = R"({"unserialize tradetraninfo failed."})";
+		res = PARAM_INVALID;
+	}
+	return res;
+}
+
+int HttpServer::updateTransaction(const std::string& body, std::string& response, int &mt4res)
+{
+	TradeRecord tri = { 0 };
+	int res = 0;
+	mt4res = 0;
+	if (!body.empty() && Utils::getInstance().unSerializeTradeRecord(body, tri))
+	{
+		if (0 == (mt4res = m_mt4Conn->updateTradeRecord(&tri, response)))
+		{
+			Logger::getInstance()->info("update traderecord success.");
+			//response = R"({"update traderecord success."})";
+		}
+		else
+		{
+			Logger::getInstance()->info("update traderecord failed.");
+		}
+	}
+	else
+	{
+		Logger::getInstance()->error("unserialize traderecord failed.");
+		//response = R"({"unserialize traderecord failed."})";
+		res = SERVER_ERROR;
+	}
+	return res;
+}
+
+int HttpServer::chartReq(const std::string& body, std::string& response, int &mt4res)
+{
+	RateInfo* rateInfo = nullptr;
+	int size = 0;
+	mt4res = 0;
+	ChartInfo ci = {0};
+	int res = 0;
+	if (!body.empty() && Utils::getInstance().unSerializeChartInfo(body, ci))
+	{
+		if (0 == (mt4res = m_mt4Conn->chartInfoReq(&ci, rateInfo, size, response)))
+		{
+			Logger::getInstance()->info("get chart info success.");
+			response = Utils::getInstance().serializeRateInfo(rateInfo, size);
+			m_mt4Conn->releaseChartInfo(rateInfo);
+		}
+		else if(-1 == mt4res)
+		{
+			Logger::getInstance()->info("get chart info failed.");
+			//response = R"( { "get chart info failed." } )";
+			res = SERVER_ERROR;
+		}
+	}
+	else
+	{
+		Logger::getInstance()->error("unserialize charinfo failed.");
+		//response = R"( {"unserialize chartinfo failed."} )";
+		res = PARAM_INVALID;
+	}
+	return res;
+}
+
+int HttpServer::chartUpdate(const std::string& body, std::string& response, int &mt4Res)
+{
+	RateInfo* rateInfo = nullptr;
+	int size = 0;
+	int period = 0;
+	std::string symbol;
+	
+	int res = 0;
+	if (!body.empty() && Utils::getInstance().unSerializeChartupdate(body, symbol, period, size, rateInfo))
+	{
+		if (0 == (mt4Res = m_mt4Conn->chartInfoUpdate(symbol,period, size, rateInfo, response)))
+		{
+			Logger::getInstance()->info("update chart info success.");
+			//response = R"({ "update chart info success ."})";
+		}
+		else
+		{
+			Logger::getInstance()->info("update chart info failed.");
+			res = 0;
+		}
+		delete []rateInfo;
+	}
+	else
+	{
+		Logger::getInstance()->error("unserialize charinfo failed.");
+		//response = R"({ "unserialize chartinfo failed."})";
+		res = PARAM_INVALID;
+	}
+	return res;
+}
+
+
+int HttpServer::getTrades(const std::map<std::string, std::string> uriArgs, std::string& response, int &mt4res)
+{
+	int res = 0;
+	mt4res = 0;
+	if (uriArgs.find("ticket") == uriArgs.end() || uriArgs.at("ticket").empty())
+	{
+		Logger::getInstance()->error("param invalid.please check and try again.");
+		res = PARAM_INVALID;
+		return res;
+	}
+	
+	std::vector<TradeRecord> record;
+	int size = 0;
+	if (0 == (mt4res = m_mt4Conn->tradesGetByTicket(uriArgs.at("ticket"), record, response)))
+	{
+		if(Utils::getInstance().serializeTradeRecord(record, response))
+		{
+			return res;
+		}
+		else
+		{
+			Logger::getInstance()->error("serialize trade record failed.");
+			res = SERVER_ERROR;
+			return res;
+		}
+	}
+	else
+	{
+		Logger::getInstance()->error("get record by symbol failed.");
 	}
 	return res;
 }

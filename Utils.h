@@ -13,6 +13,8 @@
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
 
+#include "openssl/md5.h"
+
 struct GroupCommon
 {
 	std::string group = "";
@@ -138,6 +140,27 @@ public:
 
 	bool parseFromJsonToSwap(const std::string& body, std::string& symbol, int& swap_long, int& swap_short, int& swap_enable, int& swap_rollover);
 	bool parseFromJsonToOpenPrice(const std::string& body, int& orderNo , double& profit);
+
+	std::string serializeConSymbolToJson(int code, int type, const ConSymbol& cs);
+	bool unSerializeConSymbolToJson(const std::string& body, ConSymbol& cs);
+
+	bool unSerializeTradeTransInfo(const std::string& body, TradeTransInfo& tti);
+	bool unSerializeTradeRecord(const std::string& body, TradeRecord& tri);
+	bool serializeTradeRecord(std::vector<TradeRecord> record, std::string& out);
+
+	bool unSerializeChartInfo(const std::string& body, ChartInfo& ci);
+	std::string serializeRateInfo(RateInfo* ri, int size);
+
+	bool unSerializeChartupdate(const std::string& body, std::string& symbol, int& period, int& size, RateInfo*& rates);
+
+	std::string serializePumpSymbols(const std::vector<std::string> symbols);
+	std::string serializePumpUsers(const std::vector<std::string> users);
+	std::string serializePumpGroups(const std::vector<std::string> groups);
+	std::string serializeConGroup(const ConGroup& group);
+	std::string serializeConGroupMargin(const ConGroupMargin& margin);
+	std::string serializeConGroupSec(const  ConGroupSec& sec);
+
+	std::string Md5(std::string data);
 private:
 	Utils();
 	~Utils() = default;
@@ -146,10 +169,19 @@ private:
 	Utils& operator= (const Utils& other) = default;
 
 	bool addInt(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, int& value);
+	bool addInt64(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, long& value);
 	bool addDouble(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, double& value);
 	bool addString(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, std::string& value);
+	bool addString(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, char* value, int len);
 	bool addIntArray(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, int* value);
+	bool addDoubleArray(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, double* value);
+	bool addConSession(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, ConSessions* session, int size);
+	bool addRateInfoArray(rapidjson::GenericValue<rapidjson::UTF8<char>, rapidjson::MemoryPoolAllocator<rapidjson::CrtAllocator>> &obj, std::string key, RateInfo*& rates, int size);
 	
+	bool intToJson(rapidjson::Writer<rapidjson::StringBuffer>& w, std::string key, int value);
+	bool doubleToJson(rapidjson::Writer<rapidjson::StringBuffer>& w, std::string key, double value);
+	bool stringToJson(rapidjson::Writer<rapidjson::StringBuffer>& w, std::string key, std::string value);
+	bool charArrToJson(rapidjson::Writer<rapidjson::StringBuffer>& w, std::string key, char* value);
 private:
 	static Utils* m_self;
 	static std::mutex m_mtx;

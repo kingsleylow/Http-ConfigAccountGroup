@@ -17,6 +17,7 @@ public:
 	const std::map<std::string, std::string>& getHTTPConf() { return m_HTTPConf; }
 	const std::map<std::string, std::string>& getLogConf() { return m_logConf; }
 	const std::map<std::string, std::string>& getEmailConf() { return m_emailConf; }
+	const std::map<std::string, std::string>& getRedisConf() { return m_redisConf; }
 
 	std::string getExePath(){ return m_exePath; }
 	
@@ -42,10 +43,11 @@ private:
 	std::map <std::string, std::string> m_mt4ConnConf;
 	std::map <std::string, std::string> m_logConf;
 	std::map <std::string, std::string> m_emailConf;
+	std::map <std::string, std::string> m_redisConf;
 	std::string m_confPath;
 	std::string m_exePath;
 	
-	enum class Conf{ HTTP_CONN_CONF, MT4_CONN_CONF, EMAIL_CONF};
+	enum class Conf{ HTTP_CONN_CONF, MT4_CONN_CONF, EMAIL_CONF, REDIS_CONF};
 	std::map <std::string, Conf> m_confKey;
 
 	static Config m_self;

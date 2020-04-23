@@ -75,11 +75,10 @@ int start_service()
 {
 	Config::getInstance().readConf("config/app.conf");
 	MT4Conn mt4Conn;
-	if (!mt4Conn.createConnToMT4())
+	if (!mt4Conn.mt4Init() || !mt4Conn.createConnToMT4())
 	{
 		Logger::getInstance()->error("connect to mt4 failed.");
 		std::cout << "connect to mt4 failed." << std::endl;
-		return -1;
 	}
 	else
 	{
@@ -100,7 +99,6 @@ int start_service()
 		std::cout << "http server init success." << std::endl;
 	}
 	http.setMT4Conn(&mt4Conn);
-	mt4Conn.watchConntoMT4();
 	std::cout << "running..." << std::endl;
 	http.startServer();
 	return 1;
