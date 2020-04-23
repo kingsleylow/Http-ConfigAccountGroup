@@ -37,7 +37,8 @@ public:
 	**   false: failure
 	*************************************************/
 	bool mt4Init();
-	void watchConntoMT4();
+	void watchDirectConntoMT4();
+	void watchPumpConnToMT4();
 
 	ConGroup getGroupCfg(const std::string& group);
 	int updateGroupSec(const std::string& group, const std::map<int, ConGroupSec>& cfgGroupSec,std::set<int> index, std::string& err);
@@ -168,6 +169,6 @@ private:
 	std::unordered_map<std::string, std::string> m_groupCache;
 
 
-	std::thread                   m_monitorConn;
+	std::vector<std::thread>      m_monitorConn;
 };
 

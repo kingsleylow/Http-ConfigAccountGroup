@@ -1,5 +1,6 @@
 #include "Utils.h"
 #include <typeinfo>
+#include <iostream>
 
 Utils* Utils::m_self = nullptr;
 std::mutex Utils::m_mtx;
@@ -1055,14 +1056,15 @@ bool Utils::addRateInfoArray(rapidjson::GenericValue<rapidjson::UTF8<char>, rapi
 		return false;
 	for (int i = 0; i < size; i++)
 	{
-		auto& obj = arr[i];
-		if (addInt(obj, "ctm", (int&)rates[i].ctm) &&
-			addInt(obj, "open", rates[i].open) &&
-			addInt(obj, "high", rates[i].high) &&
-			addInt(obj, "low", rates[i].low) &&
-			addInt(obj, "close", rates[i].close) &&
-			addDouble(obj, "volume", rates[i].vol))
-			return true;
+		if (addInt(arr[i], "ctm", (int&)rates[i].ctm) &&
+			addInt(arr[i], "open", rates[i].open) &&
+			addInt(arr[i], "high", rates[i].high) &&
+			addInt(arr[i], "low", rates[i].low) &&
+			addInt(arr[i], "close", rates[i].close) &&
+			addDouble(arr[i], "volume", rates[i].vol))
+		{
+			continue;
+		}
 		else
 			return false;
 	}

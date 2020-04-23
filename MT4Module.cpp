@@ -38,7 +38,8 @@ bool MT4Conn::mt4Init()
 		SPDLOG(error, "mt4 factory create mananger interface failed.");
 		return false;
 	}
-	watchConntoMT4();
+	watchDirectConntoMT4();
+	watchPumpConnToMT4();
 
 	std::string channel = Config::getInstance().getRedisConf().find("cache-channel")->second;
 	std::string host = Config::getInstance().getRedisConf().find("host")->second;
@@ -150,7 +151,8 @@ bool MT4Conn::mt4Login(const int login, const char* passwd, CManagerInterface*& 
 		SPDLOG(error, "3 times of login to mt4 server failed.");
 		return false;
 	}
-		
+	std::cout << "login " << login << "success." << std::endl;
+	Logger::getInstance()->info("{} login success.", login);
 	return true;
 }
 
@@ -522,9 +524,9 @@ bool MT4Conn::heartBeat()
 	return m_directInter->Ping();
 }
 
-void MT4Conn::watchConntoMT4()
+void MT4Conn::watchDirectConntoMT4()
 {
-	m_monitorConn = std::thread([&]()
+	m_monitorConn.push_back(std::thread([&]()
 	{
 		while (true)
 		{
@@ -533,14 +535,24 @@ void MT4Conn::watchConntoMT4()
 			if (!mt4DirtIsConnected())
 			{
 				Logger::getInstance()->warn("disconnected to mt4. will try to connect to mt4.");
-				if (!createConnToMT4())
+				if (!createDirectConnToMT4(m_directInter))
 				{
 					Logger::getInstance()->info("connect to mt4 failed.");
 					std::cout << "direct connect to mt4 failed" << std::endl;
 				}
 			}
+		}
+	}));
+}
+void MT4Conn::watchPumpConnToMT4()
+{
+	m_monitorConn.push_back(std::thread([&]()
+	{
+		while (true)
+		{
+			std::this_thread::sleep_for(std::chrono::seconds(3));
 
-			if (nullptr == m_pumpInter || !m_pumpInter->IsConnected())
+			if (nullptr == m_pumpInter || 0 == m_pumpInter->IsConnected())
 			{
 				if (!createPumpConnToMT4(m_pumpInter))
 				{
@@ -549,8 +561,7 @@ void MT4Conn::watchConntoMT4()
 				}
 			}
 		}
-	});
-	m_monitorConn.detach();
+	}));
 }
 
 ConGroup MT4Conn::getGroupCfg(const std::string& group)
