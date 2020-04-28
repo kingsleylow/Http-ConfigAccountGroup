@@ -1319,3 +1319,45 @@ int MT4Conn::chartInfoUpdate(const std::string symbol, const int period, int siz
 		err = m_directInter->ErrorDescription(res);
 	return res;
 }
+
+int MT4Conn::getUserRecord(int login, UserRecord& ur, std::string& err)
+{
+	std::lock_guard<std::mutex> lock(m_directMtx);
+	const int logins[1] = { login };
+	int total = sizeof(logins);
+	UserRecord* tmpUr = m_directInter->UserRecordsRequest(logins, &total);
+	if (NULL == tmpUr)
+	{
+		if (NULL == (tmpUr = m_directInter->UserRecordsRequest(logins, &total)))
+		{
+			return -1;
+		}
+		else
+		{
+			ur = tmpUr[0];
+			m_directInter->MemFree(tmpUr);
+			return 0;
+		}
+	}
+	else
+	{
+		ur = tmpUr[0];
+		m_directInter->MemFree(tmpUr);
+		return 0;
+	}
+}
+
+
+int MT4Conn::updateUserRecord(const UserRecord& ur, std::string& err)
+{
+	int code = m_directInter->UserRecordUpdate(&ur);
+	if (code != RET_OK)
+	{ 
+		err = m_directInter->ErrorDescription(code);
+		return code;
+	}
+	else
+	{
+		return code;
+	}
+}

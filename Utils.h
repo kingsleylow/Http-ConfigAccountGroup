@@ -160,6 +160,9 @@ public:
 	std::string serializeConGroupMargin(const ConGroupMargin& margin);
 	std::string serializeConGroupSec(const  ConGroupSec& sec);
 
+	bool serializeUserRecord(const UserRecord& ur, std::string& out);
+	bool unSerializeUserRecord(const std::string& body, UserRecord& ur);
+
 	std::string Md5(std::string data);
 private:
 	Utils();

@@ -57,6 +57,9 @@ HttpServer::HttpServer()
 	std::string global_symbols_list = Config::getInstance().getHTTPConf().find("symbols-list")->second;       //symbols-list
 	std::string get_holiday = Config::getInstance().getHTTPConf().find("get-holiday")->second;
 	std::string common_securities = Config::getInstance().getHTTPConf().find("common-symbol-groups")->second; //securities-list
+
+	std::string get_userrecord = Config::getInstance().getHTTPConf().find("get-user-record")->second;
+	std::string update_userrecord = Config::getInstance().getHTTPConf().find("update-user-record")->second;
 	m_uri = { {common, COMMON},
 	{permissions, PERMISSIONS},
 	{archiving, ARCHIVING},
@@ -88,7 +91,9 @@ HttpServer::HttpServer()
 	{get_trade, GET_TRADE},
 	{update_trade, UPDATE_TRADE},
 	{chart_update, CHART_UPDATE},
-	{chart_req, CHART_REQ} };
+	{chart_req, CHART_REQ},
+	{get_userrecord, GET_USERRECORD},
+	{update_userrecord, UPDATE_USERRECORD} };
 }
 
 HttpServer::~HttpServer()
@@ -483,6 +488,9 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 		case CHART_UPDATE:
 			res = chartUpdate(body, response, mt4res);
 			break;
+		case UPDATE_USERRECORD:
+			res = updateUserRecord(body, response, mt4res);
+			break;
 		default:
 			//response = R"( {"bad url or request method not right." } )";
 			res = BAD_URL;
@@ -555,6 +563,9 @@ int HttpServer::handleReq(const evhttp_cmd_type& method, const std::string& uri,
 			break;
 		case GET_TRADE:
 			res = getTrades(uriArgs, response, mt4res);
+			break;
+		case GET_USERRECORD:
+			res = getUserRecord(uriArgs, response, mt4res);
 			break;
 		default:
 			//response = R"( { "bad url or request method not right." })";
@@ -1682,6 +1693,65 @@ int HttpServer::getTrades(const std::map<std::string, std::string> uriArgs, std:
 	else
 	{
 		Logger::getInstance()->error("get record by symbol failed.");
+	}
+	return res;
+}
+
+int HttpServer::getUserRecord(const std::map<std::string, std::string>& uriArgs, std::string& response, int& mt4res)
+{
+	int res = 0;
+	mt4res = 0;
+	if (uriArgs.find("login") == uriArgs.end() || uriArgs.at("login").empty())
+	{
+		Logger::getInstance()->error("param invalid.please check and try again.");
+		res = PARAM_INVALID;
+		return res;
+	}
+
+	UserRecord ur = {0};
+	int size = 0;
+	if (0 == (mt4res = m_mt4Conn->getUserRecord(std::stoi(uriArgs.at("login")), ur, response)))
+	{
+		if (Utils::getInstance().serializeUserRecord(ur, response))
+		{
+			return res;
+		}
+		else
+		{
+			Logger::getInstance()->error("serialize user record failed.");
+			res = SERVER_ERROR;
+			return res;
+		}
+	}
+	else
+	{
+		Logger::getInstance()->error("get user record by login failed.");
+	}
+	return res;
+}
+
+int HttpServer::updateUserRecord(const std::string& body, std::string& response, int& mt4res)
+{
+	int res = 0;
+	UserRecord ur = {0};
+	if (!body.empty() && Utils::getInstance().unSerializeUserRecord(body, ur))
+	{
+		if (0 == (mt4res = m_mt4Conn->updateUserRecord(ur, response)))
+		{
+			Logger::getInstance()->info("update user record success.");
+			//response = R"({ "update chart info success ."})";
+		}
+		else
+		{
+			Logger::getInstance()->info("update user record failed.");
+			res = 0;
+		}
+	}
+	else
+	{
+		Logger::getInstance()->error("unserialize user record failed.");
+		//response = R"({ "unserialize chartinfo failed."})";
+		res = PARAM_INVALID;
 	}
 	return res;
 }

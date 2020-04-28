@@ -101,6 +101,9 @@ public:
 	void releaseChartInfo(RateInfo*& chart);
 
 	int chartInfoUpdate(const std::string symbol, const int period, int size, const RateInfo* rates, std::string& err);
+
+	int getUserRecord(int login, UserRecord& ur, std::string& err);
+	int updateUserRecord(const UserRecord& ur, std::string& err);
 private:
 	bool storeGroupsInfo(void* data, int type);
 	bool storeSymbolsInfo(void* data, int type);

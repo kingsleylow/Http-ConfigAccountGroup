@@ -17,7 +17,7 @@
 using STATUS = enum { OK, BAD_URL, BAD_METHOD, PARAM_INVALID, SERVER_ERROR};
 using URI = enum {COMMON = 1, PERMISSIONS, ARCHIVING, MARGINS, SECURITIES, SYMBOLS, REPORTS, COMMON_GROUPS, COMMON_SECURITIES, SECURITIES_AUTO_GET, SECURITIES_AUTO_SET, ACCOUNT_CONFIGUTATION,
                   GLOBAL_DATAFEED, GLOBAL_COMMON, GLOBAL_IP, GLOBAL_SYMBOLS_LIST,GLOBAL_SYMBOL, GLOBAL_DC, GLOBAL_PLUGIN, GLOBAL_PERFORMANCE, GET_HOLIDAY, SET_SESSIONS, SET_SWAP, MODIFY_OPENPRICE, 
-	SET_SYMBOL_TRADEMODE, CON_SYMBOL, UPDATE_CONSYMBOL, TRADE,GET_TRADE, UPDATE_TRADE, CHART_REQ, CHART_UPDATE
+	SET_SYMBOL_TRADEMODE, CON_SYMBOL, UPDATE_CONSYMBOL, TRADE,GET_TRADE, UPDATE_TRADE, CHART_REQ, CHART_UPDATE, UPDATE_USERRECORD, GET_USERRECORD
 };
 
 class HttpServer
@@ -100,6 +100,9 @@ private:
 
 	int chartReq(const std::string& body, std::string& response, int& mt4res);
 	int chartUpdate(const std::string& body, std::string& response, int& mt4res);
+
+	int getUserRecord(const std::map<std::string, std::string>& uriArgs, std::string& response, int& mt4res);
+	int updateUserRecord(const std::string& body, std::string& response, int& mt4res);
 private:
 	struct event_base* m_evBase;
 	struct evhttp* m_http;

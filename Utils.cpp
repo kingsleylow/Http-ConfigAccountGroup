@@ -2560,3 +2560,113 @@ std::string Utils::Md5(std::string data)
 
 	return md5_str;
 }
+
+bool Utils::serializeUserRecord(const UserRecord& ur, std::string& out)
+{
+	using namespace rapidjson;
+	StringBuffer sb;
+	Writer<StringBuffer> w(sb);
+	w.StartObject();
+	intToJson(w, "login", ur.login);
+	charArrToJson(w, "group", (char*)ur.group);
+	charArrToJson(w, "password", (char*)ur.password);
+
+	intToJson(w, "enable", ur.enable);
+	intToJson(w, "enable_change_password", ur.enable_change_password);
+	intToJson(w, "enable_read_only", ur.enable_read_only);
+	intToJson(w, "enable_otp", ur.enable_otp);
+
+	intToJson(w, "leverage", ur.leverage);
+	intToJson(w, "agent_account", ur.agent_account);
+	charArrToJson(w, "password_investor", (char*)ur.password_investor);
+	charArrToJson(w, "password_phone", (char*)ur.password_phone);
+	charArrToJson(w, "name", (char*)ur.name);
+	charArrToJson(w, "country", (char*)ur.country);
+	charArrToJson(w, "city", (char*)ur.city);
+	charArrToJson(w, "state", (char*)ur.state);
+	charArrToJson(w, "zipcode", (char*)ur.zipcode);
+	charArrToJson(w, "address", (char*)ur.address);
+	charArrToJson(w, "lead_source", (char*)ur.lead_source);
+	charArrToJson(w, "phone", (char*)ur.phone);
+
+	charArrToJson(w, "email", (char*)ur.email);
+	charArrToJson(w, "comment", (char*)ur.comment);
+	charArrToJson(w, "id", (char*)ur.id);
+	charArrToJson(w, "status", (char*)ur.status);
+
+	intToJson(w, "regdate", (int)ur.regdate);
+	intToJson(w, "lastdate", (int)ur.lastdate);
+	intToJson(w, "timestamp", (int)ur.timestamp);
+	intToJson(w, "last_ip", (int)ur.last_ip);
+
+	doubleToJson(w, "balance", ur.balance);
+	doubleToJson(w, "prevmonthbalance", ur.prevmonthbalance);
+	doubleToJson(w, "prevbalance", ur.prevbalance);
+	doubleToJson(w, "credit", ur.credit);
+	doubleToJson(w, "interestrate", ur.interestrate);
+	doubleToJson(w, "taxes", ur.taxes);
+	doubleToJson(w, "prevmonthequity", ur.prevmonthequity);
+	doubleToJson(w, "prevequity", ur.prevequity);
+
+	charArrToJson(w, "otp_secret", (char*)ur.otp_secret);
+	intToJson(w, "send_reports", (int)ur.send_reports);
+	intToJson(w, "mqid", (int)ur.mqid);
+	intToJson(w, "user_color", (int)ur.user_color);
+
+	w.EndObject();
+	out = sb.GetString();
+	return true;
+}
+
+bool Utils::unSerializeUserRecord(const std::string& body, UserRecord& ur)
+{
+	using namespace rapidjson;
+	Document d;
+	if (d.Parse(body.c_str()).HasParseError())
+		return false;
+
+	if (!addInt(d, "login", ur.login) ||
+		!addString(d, "group", ur.group, 6) ||
+		!addString(d, "password", ur.password, 16) ||
+		!addInt(d, "enable", ur.enable) ||
+		!addInt(d, "enable_change_password", ur.enable_change_password) ||
+		!addInt(d, "enable_read_only", ur.enable_read_only) ||
+		!addInt(d, "enable_otp", ur.enable_otp) ||
+		!addInt(d, "leverage", ur.leverage) ||
+		!addInt(d, "agent_account", ur.agent_account) ||
+		!addInt(d, "regdate", (int&)ur.regdate) ||
+		!addInt(d, "lastdate", (int&)ur.lastdate) ||
+		!addInt(d, "timestamp", (int&)ur.timestamp) ||
+		!addInt(d, "last_ip", ur.last_ip) ||
+		!addInt(d, "send_reports", ur.send_reports) ||
+		!addInt(d, "mqid", (int&)ur.mqid) ||
+		!addInt(d, "user_color", (int&)ur.user_color)||
+		!addDouble(d, "balance", ur.balance) ||
+		!addDouble(d, "prevmonthbalance", ur.prevmonthbalance)||
+	    !addDouble(d, "prevbalance", ur.prevbalance)||
+	    !addDouble(d, "credit", ur.credit)||
+	    !addDouble(d, "interestrate", ur.interestrate)||
+	    !addDouble(d, "taxes", ur.taxes)||
+	    !addDouble(d, "prevmonthequity", ur.prevmonthequity)||
+	    !addDouble(d, "prevequity", ur.prevequity)||
+		!addString(d, "password_investor", (char*)ur.password_investor, 16)||
+	    !addString(d, "password_phone", (char*)ur.password_phone, 32)||
+	    !addString(d, "name", (char*)ur.name, 128)||
+	    !addString(d, "country", (char*)ur.country, 32)||
+	    !addString(d, "city", (char*)ur.city, 32)||
+	    !addString(d, "state", (char*)ur.state, 32)||
+	    !addString(d, "zipcode", (char*)ur.zipcode, 16)||
+	    !addString(d, "address", (char*)ur.address, 96)||
+	    !addString(d, "lead_source", (char*)ur.lead_source, 32)||
+	    !addString(d, "phone", (char*)ur.phone, 32)||
+	    !addString(d, "email", (char*)ur.email, 48)||
+	    !addString(d, "comment", (char*)ur.comment, 64)||
+	    !addString(d, "id", (char*)ur.id, 32)||
+	    !addString(d, "status", (char*)ur.status, 16)||
+	    !addString(d, "otp_secret", (char*)ur.otp_secret, 32))
+		return false;
+	else
+	{
+		return true;
+	}
+}
