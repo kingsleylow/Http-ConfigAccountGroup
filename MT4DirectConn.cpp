@@ -55,6 +55,7 @@ bool DirectConn::mt4Release()
 
 bool DirectConn::init()
 {
+	monitorConn();
 	std::string path = Common::getInstance()->getProjectPath();
 	path = path + Config::getInstance().getMT4ConnConf().find("direct")->second;
 	m_factoryInter.Init(path.c_str());
@@ -187,7 +188,6 @@ bool DirectConn::createConnToMT4()
 	{
 		connectionStatus = connectionStatus && false;
 	}
-	monitorConn();
 	return connectionStatus;
 }
 

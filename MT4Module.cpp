@@ -530,7 +530,7 @@ void MT4Conn::watchDirectConntoMT4()
 	{
 		while (true)
 		{
-			std::this_thread::sleep_for(std::chrono::seconds(3));
+			std::this_thread::sleep_for(std::chrono::seconds(1));
 
 			if (!mt4DirtIsConnected())
 			{
@@ -550,7 +550,7 @@ void MT4Conn::watchPumpConnToMT4()
 	{
 		while (true)
 		{
-			std::this_thread::sleep_for(std::chrono::seconds(3));
+			std::this_thread::sleep_for(std::chrono::seconds(1));
 
 			if (nullptr == m_pumpInter || 0 == m_pumpInter->IsConnected())
 			{
